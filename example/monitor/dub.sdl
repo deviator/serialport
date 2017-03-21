@@ -1,0 +1,6 @@
+name "monitor"
+description "serial port monitor"
+authors "deviator"
+copyright "Copyright © 2017, deviator"
+license "proprietary"
+dependency "serialport" path="../.."
