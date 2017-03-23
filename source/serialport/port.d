@@ -3,7 +3,7 @@ module serialport.port;
 
 import std.algorithm;
 import std.array;
-import std.conv : to, octal;
+import std.conv : to, text, octal;
 import std.exception;
 import std.experimental.logger;
 import std.path;
