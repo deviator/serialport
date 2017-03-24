@@ -392,8 +392,16 @@ public:
             version (Posix)
             {
                 auto sres = posixRead(handle, ptr, len);
-                enforce(sres >= 0, new ReadException(port));
-                res = sres;
+
+                import core.stdc.errno;
+                if (sres < 0 && errno == EAGAIN) // no bytes for read, it's ok
+                    sres = 0;
+                else
+                {
+                    enforce(sres >= 0,
+                            new ReadException(port, format("errno %d", errno)));
+                    res = sres;
+                }
             }
             version (Windows)
             {
