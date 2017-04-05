@@ -39,6 +39,7 @@ package
         import core.sys.posix.fcntl;
         import core.sys.posix.sys.select;
         import core.sys.posix.sys.ioctl;
+        import core.stdc.errno;
         import std.algorithm;
         import std.file;
 

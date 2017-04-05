@@ -133,19 +133,16 @@ class TimeoutException : IOException
 class ReadException : IOException
 {
     ///
-    this(string port, string msg="", string file=__FILE__, size_t line=__LINE__)
+    this(string port, string msg, string file=__FILE__, size_t line=__LINE__)
         @safe pure nothrow
-    {
-        super(port, "Failed to read from '" ~ port ~ "'"
-                ~ (msg ? ": " ~ msg : ""), file, line);
-    }
+    { super(port, "Failed to read from '" ~ port ~ "': " ~ msg, file, line); }
 }
 
 ///
 class WriteException : IOException
 {
     ///
-    this(string port, string file=__FILE__, size_t line=__LINE__)
+    this(string port, string msg, string file=__FILE__, size_t line=__LINE__)
         @safe pure nothrow
-    { super(port, "Failed to write to '" ~ port ~ "'", file, line); }
+    { super(port, "Failed to write to '" ~ port ~ "': " ~ msg, file, line); }
 }

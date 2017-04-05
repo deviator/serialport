@@ -14,8 +14,7 @@ import std.datetime : StopWatch;
 import serialport.types;
 import serialport.exception;
 
-version (Posix) {}
-else version (Windows) {}
+version (Posix) {} else version (Windows) {}
 else static assert(0, "unsupported platform");
 
 ///
@@ -137,7 +136,7 @@ public:
             {
                 termios opt;
                 enforce(tcgetattr(handle, &opt) != -1,
-                        new SerialPortException("Failed while call tcgetattr"));
+                        new SerialPortException(format("Failed while call tcgetattr: %d", errno)));
 
                 ret.baudRate = getUintBaudRate();
 
@@ -183,7 +182,7 @@ public:
 
                 termios opt;
                 enforce(tcgetattr(handle, &opt) != -1,
-                        new SerialPortException("Failed while call tcgetattr"));
+                        new SerialPortException(format("Failed while call tcgetattr: %d", errno)));
 
                 final switch (c.parity)
                 {
@@ -224,7 +223,18 @@ public:
                 }
 
                 enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
-                        new SerialPortException("Failed while call tcsetattr"));
+                        new SerialPortException(format("Failed while call tcsetattr: %d", errno)));
+
+                auto test = config;
+
+                enforce(test.baudRate == c.baudRate,
+                            new BaudRateUnsupportedException(c.baudRate));
+                enforce(test.parity == c.parity,
+                            new ParityUnsupportedException(c.parity));
+                enforce(test.stopBits == c.stopBits,
+                            new StopBitsUnsupportedException(c.stopBits));
+                enforce(test.dataBits == c.dataBits,
+                            new DataBitsUnsupportedException(c.dataBits));
             }
             version (Windows)
             {
@@ -351,13 +361,18 @@ public:
             version (Posix)
             {
                 res = posixWrite(handle, ptr, len);
-                enforce(res >= 0, new WriteException(port));
+                enforce(res >= 0, new WriteException(port, text("errno ", errno)));
             }
             version (Windows)
             {
                 uint sres;
-                enforce(WriteFile(handle, ptr, cast(uint)len, &sres, null),
-                        new WriteException(port));
+                auto wfr = WriteFile(handle, ptr, cast(uint)len, &sres, null);
+                if (!wfr)
+                {
+                    auto err = GetLastError();
+                    if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
+                    else throw new WriteException(port, text("error ", err));
+                }
                 res = sres;
             }
 
@@ -383,7 +398,8 @@ public:
         full.start();
         while (true)
         {
-            enforce(readed < arr.length);
+            enforce(readed < arr.length,
+                    new SerialPortException("read more what can"));
             size_t res;
 
             auto ptr = arr.ptr + readed;
@@ -393,21 +409,25 @@ public:
             {
                 auto sres = posixRead(handle, ptr, len);
 
-                import core.stdc.errno;
                 if (sres < 0 && errno == EAGAIN) // no bytes for read, it's ok
                     sres = 0;
                 else
                 {
                     enforce(sres >= 0,
-                            new ReadException(port, format("errno %d", errno)));
+                            new ReadException(port, text("errno ", errno)));
                     res = sres;
                 }
             }
             version (Windows)
             {
                 uint sres;
-                enforce(ReadFile(handle, ptr, cast(uint)len, &sres, null),
-                        new ReadException(port));
+                auto rfr = ReadFile(handle, ptr, cast(uint)len, &sres, null);
+                if (!rfr)
+                {
+                    auto err = GetLastError();
+                    if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
+                    else throw new ReadException(port, text("error ", err));
+                }
                 res = sres;
             }
 
@@ -455,7 +475,8 @@ protected:
             }
             else
             {
-                enforce(br in unixBaudList, new BaudRateUnsupportedException(br));
+                enforce(br in unixBaudList,
+                        new BaudRateUnsupportedException(br));
 
                 auto baud = unixBaudList[br];
 
@@ -504,10 +525,9 @@ protected:
         version (Posix)
         {
             handle = open(port.toStringz(), O_RDWR | O_NOCTTY | O_NONBLOCK);
-            enforce(handle != -1, new SetupFailException(port, "can't open port"));
-
-            //enforce(fcntl(handle, F_SETFL, 0) != -1,  // disable O_NONBLOCK
-            //        new SetupFailException(port, "can't disable O_NONBLOCK"));
+            enforce(handle != -1,
+                    new SetupFailException(port,
+                        format("Can't open port (errno %d)", errno)));
 
             termios opt;
             enforce(tcgetattr(handle, &opt) != -1,
@@ -522,16 +542,22 @@ protected:
             opt.c_cflag |= CS8;
 
             enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
-                    new SetupFailException("Failed while call tcsetattr"));
+                    new SetupFailException(format("Failed while" ~
+                            " call tcsetattr (errno %d)", errno)));
         }
         else version (Windows)
         {
-            handle = CreateFileA((`\\.\` ~ port).toStringz,
+            auto fname = `\\.\` ~ port;
+            handle = CreateFileA(fname.toStringz,
                         GENERIC_READ | GENERIC_WRITE, 0, null,
                         OPEN_EXISTING, 0, null);
 
             if(handle is INVALID_HANDLE_VALUE)
-                throw new SetupFailException(port, "can't CreateFileA");
+            {
+                auto err = GetLastError();
+                throw new SetupFailException(port,
+                        format("can't CreateFileA '%s' with error: %d", fname, err));
+            }
 
             SetupComm(handle, 4096, 4096);
             PurgeComm(handle, PURGE_TXABORT | PURGE_TXCLEAR |
@@ -545,7 +571,8 @@ protected:
             tm.WriteTotalTimeoutConstant   = 0;
 
             if (SetCommTimeouts(handle, &tm) == 0)
-                throw new SetupFailException(port, "can't SetCommTimeouts");
+                throw new SetupFailException(port,
+                        format("can't SetCommTimeouts with error: %d", GetLastError()));
         }
 
         config = conf;
