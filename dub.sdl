@@ -1,5 +1,5 @@
 name "serialport"
-targetType "sourceLibrary"
+targetType "library"
 description "Simple crossplatform work with serailport"
 authors "Oleg Butko (deviator)"
 copyright "Copyright © 2017"

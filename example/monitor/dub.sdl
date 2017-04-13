@@ -1,4 +1,5 @@
 name "monitor"
+targetType "executable"
 description "serial port monitor"
 authors "deviator"
 copyright "Copyright © 2017, deviator"
