@@ -539,6 +539,7 @@ protected:
             opt.c_oflag &= ~OPOST;
             opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
             opt.c_cflag &= ~(CSIZE | PARENB);
+            opt.c_cflag &= ~CRTSCTS;
             opt.c_cflag |= CS8;
 
             enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
