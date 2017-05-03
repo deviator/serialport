@@ -55,6 +55,12 @@ public:
         ///
         StopBits stopBits=StopBits.one;
 
+        version (flowcontrol)
+        {
+            ///
+            bool hardwareDisableFlowControl = true;
+        }
+
         auto set(Parity v) { parity = v; return this; }
         auto set(uint v) { baudRate = v; return this; }
         auto set(DataBits v) { dataBits = v; return this; }
@@ -539,7 +545,11 @@ protected:
             opt.c_oflag &= ~OPOST;
             opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
             opt.c_cflag &= ~(CSIZE | PARENB);
-            opt.c_cflag &= ~CRTSCTS;
+            version (flowcontrol)
+            {
+                if (conf.hardwareDisableFlowControl)
+                    opt.c_cflag &= ~CRTSCTS;
+            }
             opt.c_cflag |= CS8;
 
             enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
