@@ -9,7 +9,7 @@ import std.experimental.logger;
 import std.path;
 import std.string;
 import core.time;
-import std.datetime : StopWatch;
+import std.datetime;
 
 import serialport.types;
 import serialport.exception;
@@ -30,15 +30,27 @@ protected:
     version (Windows) HANDLE handle = null;
 
     /// preform pause
-    void yield()
+    void sleep(Duration dt)
     {
-        if (yieldFunc !is null) yieldFunc();
+        if (sleepFunc !is null) sleepFunc(dt);
         else
         {
             import core.thread;
-            if (Fiber.getThis is null) Thread.yield();
-            else Fiber.yield();
+            if (Fiber.getThis is null)
+                Thread.sleep(dt);
+            else
+            {
+                auto tm = StopWatch(AutoStart.yes);
+                if (tm.peek.to!Duration < dt) Fiber.yield();
+            }
         }
+    }
+
+    pragma(inline, true) Duration ioPause()
+    {
+        // approx theoretical time for receive or send
+        // one byte (8 bit + 1 start bit + 1 stop bit)
+        return (cast(ulong)(10.0f / baudRate * 1e6)).usecs;
     }
 
 public:
@@ -67,30 +79,30 @@ public:
         auto set(StopBits v) { stopBits = v; return this; }
     }
 
-    /// extended delegate for yielding
-    void delegate() yieldFunc;
+    /// extended delegate for perform sleep
+    void delegate(Duration dt) sleepFunc;
 
     ///
-    this(string port, Config conf=Config.init, void delegate() yh=null)
+    this(string port, Config conf=Config.init, void delegate(Duration) slp=null)
     {
         this.port = port;
-        this.yieldFunc = yh;
+        this.sleepFunc = slp;
         setup(conf);
     }
 
     ///
-    this(string port, uint baudRate, void delegate() yh=null)
-    { this(port, Config(baudRate), yh); }
+    this(string port, uint baudRate, void delegate(Duration) slp=null)
+    { this(port, Config(baudRate), slp); }
 
     ///
-    this(string port, uint baudRate, Parity parity, void delegate() yh=null)
-    { this(port, Config(baudRate, parity), yh); }
+    this(string port, uint baudRate, Parity parity, void delegate(Duration) slp=null)
+    { this(port, Config(baudRate, parity), slp); }
 
     ///
     this(string port, uint baudRate, Parity parity,
             DataBits dataBits,
-            StopBits stopBits, void delegate() yh=null)
-    { this(port, Config(baudRate, parity, dataBits, stopBits), yh); }
+            StopBits stopBits, void delegate(Duration) slp=null)
+    { this(port, Config(baudRate, parity, dataBits, stopBits), slp); }
 
     ~this() { close(); }
 
@@ -349,13 +361,15 @@ public:
     }
 
     ///
-    void write(const(void[]) arr, Duration timeout=500.dur!"usecs")
+    void write(const(void[]) arr, Duration timeout=500.usecs)
     {
         if (closed) throw new PortClosedException(port);
 
         size_t written = 0;
 
         StopWatch full;
+
+        auto pause = ioPause();
 
         full.start();
         while (written < arr.length)
@@ -387,17 +401,19 @@ public:
             if (full.peek().to!Duration > timeout)
                 throw new TimeoutException(port);
 
-            yield();
+            sleep(pause);
         }
     }
 
     ///
-    void[] read(void[] arr, Duration timeout=1.dur!"seconds",
-                            Duration frameGap=4.dur!"msecs")
+    void[] read(void[] arr, Duration timeout=1.seconds,
+                            Duration frameGap=4.msecs)
     {
         if (closed) throw new PortClosedException(port);
 
         size_t readed = 0;
+
+        auto pause = ioPause();
 
         StopWatch silence, full;
 
@@ -455,7 +471,7 @@ public:
             if (readed == 0 && full.peek().to!Duration > timeout)
                 throw new TimeoutException(port);
 
-            yield();
+            sleep(pause);
         }
     }
 
