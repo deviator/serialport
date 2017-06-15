@@ -411,7 +411,7 @@ public:
     {
         if (closed) throw new PortClosedException(port);
 
-        size_t readed = 0;
+        ptrdiff_t readed = 0;
 
         auto pause = ioPause();
 
@@ -420,7 +420,7 @@ public:
         full.start();
         while (true)
         {
-            enforce(readed < arr.length,
+            enforce(readed <= arr.length,
                     new SerialPortException("read more what can"));
             size_t res;
 
@@ -434,11 +434,9 @@ public:
                 if (sres < 0 && errno == EAGAIN) // no bytes for read, it's ok
                     sres = 0;
                 else
-                {
                     enforce(sres >= 0,
                             new ReadException(port, text("errno ", errno)));
-                    res = sres;
-                }
+                res = sres;
             }
             version (Windows)
             {
