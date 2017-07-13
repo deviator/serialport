@@ -41,7 +41,7 @@ protected:
             else
             {
                 auto tm = StopWatch(AutoStart.yes);
-                if (tm.peek.to!Duration < dt) Fiber.yield();
+                while (tm.peek.to!Duration < dt) Fiber.yield();
             }
         }
     }
