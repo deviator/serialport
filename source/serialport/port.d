@@ -46,7 +46,7 @@ protected:
         }
     }
 
-    pragma(inline, true) Duration ioPause()
+    Duration ioPause()
     {
         // approx theoretical time for receive or send
         // one byte (8 bit + 1 start bit + 1 stop bit)
