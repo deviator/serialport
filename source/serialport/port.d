@@ -123,6 +123,14 @@ public:
     }
 
     ///
+    void reopen(string port, Config cfg)
+    {
+        if (!closed) close();
+        this.port = port;
+        setup(cfg);
+    }
+
+    ///
     override string toString() { return port; }
 
     ///
