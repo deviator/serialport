@@ -349,20 +349,13 @@ public:
             }
             version (Windows)
             {
+                import std.windows.registry;
                 string[] ret;
-                enum pre = `\\.\COM`;
-                foreach (int n; 0 .. 255)
-                {
-                    auto i = n+1;
-                    HANDLE p = CreateFileA(text(pre, i).toStringz,
-                            GENERIC_READ | GENERIC_WRITE, 0, null,
-                                           OPEN_EXISTING, 0, null);
-                    if (p != INVALID_HANDLE_VALUE)
-                    {
-                        ret ~= text("COM", i);
-                        CloseHandle(p);
-                    }
-                }
+                auto coms = Registry.localMachine().getKey("HARDWARE").getKey("DEVICEMAP").getKey("SERIALCOMM").values;
+                ret.length = coms.count;
+                for (int i=0;i< ret.length;i++) {
+                    ret[i]=coms[i].value_SZ;
+                }   
                 return ret;
             }
         }
@@ -613,3 +606,10 @@ protected:
 }
 
 private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
+
+unittest{
+    import std.stdio;
+    foreach(  e ;SerialPort.ports()   ){
+        std.stdio.writeln(e);
+    }
+}
