@@ -349,14 +349,17 @@ public:
             }
             version (Windows)
             {
+                import std.algorithm : map;
+                import std.array : array;
                 import std.windows.registry;
-                string[] ret;
-                auto coms = Registry.localMachine().getKey("HARDWARE").getKey("DEVICEMAP").getKey("SERIALCOMM").values;
-                ret.length = coms.count;
-                for (int i=0;i< ret.length;i++) {
-                    ret[i]=coms[i].value_SZ;
-                }   
-                return ret;
+                return Registry
+                        .localMachine()
+                        .getKey("HARDWARE")
+                        .getKey("DEVICEMAP")
+                        .getKey("SERIALCOMM")
+                        .values
+                        .map!(a => a.valueSZ)
+                        .array;
             }
         }
     }
@@ -606,10 +609,3 @@ protected:
 }
 
 private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
-
-unittest{
-    import std.stdio;
-    foreach(  e ;SerialPort.ports()   ){
-        std.stdio.writeln(e);
-    }
-}
