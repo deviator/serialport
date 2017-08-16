@@ -53,6 +53,19 @@ protected:
         return (cast(ulong)(10.0f / baudRate * 1e6)).usecs;
     }
 
+    int fiber_mutex;
+    struct FSync
+    {
+        int* mutex;
+        this(SerialPort sp)
+        {
+            mutex = &(sp.fiber_mutex);
+            while (*mutex) sp.sleep(0.msecs);
+            *mutex = 1;
+        }
+        ~this() { *mutex = 0; }
+    }
+
 public:
 
     ///
@@ -67,11 +80,7 @@ public:
         ///
         StopBits stopBits=StopBits.one;
 
-        version (flowcontrol)
-        {
-            ///
-            bool hardwareDisableFlowControl = true;
-        }
+        bool hardwareDisableFlowControl = true;
 
         auto set(Parity v) { parity = v; return this; }
         auto set(uint v) { baudRate = v; return this; }
@@ -109,13 +118,14 @@ public:
     /// close handle
     void close()
     {
+        auto fsync = FSync(this);
         if (closed) return;
-        version(Windows)
+        version (Windows)
         {
             CloseHandle(handle);
             handle = null;
         }
-        version(Posix)
+        version (Posix)
         {
             posixClose(handle);
             handle = -1;
@@ -125,6 +135,7 @@ public:
     ///
     void reopen(string port, Config cfg)
     {
+        auto fsync = FSync(this);
         if (!closed) close();
         this.port = port;
         setup(cfg);
@@ -147,13 +158,14 @@ public:
         ///
         bool closed() const
         {
-            version(Posix) return handle == -1;
-            version(Windows) return handle is null;
+            version (Posix) return handle == -1;
+            version (Windows) return handle is null;
         }
 
         ///
         Config config()
         {
+            auto fsync = FSync(this);
             enforce(!closed, new PortClosedException(port));
 
             Config ret;
@@ -200,6 +212,7 @@ public:
         ///
         void config(Config c)
         {
+            auto fsync = FSync(this);
             if (closed) throw new PortClosedException(port);
 
             version (Posix)
@@ -331,14 +344,14 @@ public:
                     static bool isInRange(T, U)(T v, U a, U b)
                     { return a <= v && v <= b; }
 
-                    version(linux)   return n.startsWith("ttyUSB") ||
-                                            n.startsWith("ttyS");
-                    version(darwin)  return n.startsWith("cu");
-                    version(FreeBSD) return n.startsWith("cuaa") ||
-                                            n.startsWith("cuad");
-                    version(openbsd) return n.startsWith("tty");
-                    version(solaris) return n.startsWith("tty") &&
-                                            isInRange(n[$-1],'a','z');
+                    version (linux)   return n.startsWith("ttyUSB") ||
+                                             n.startsWith("ttyS");
+                    version (darwin)  return n.startsWith("cu");
+                    version (FreeBSD) return n.startsWith("cuaa") ||
+                                             n.startsWith("cuad");
+                    version (openbsd) return n.startsWith("tty");
+                    version (solaris) return n.startsWith("tty") &&
+                                             isInRange(n[$-1],'a','z');
                 }
 
                 return dirEntries("/dev/", SpanMode.shallow)
@@ -367,6 +380,7 @@ public:
     ///
     void write(const(void[]) arr, Duration timeout=500.usecs)
     {
+        auto fsync = FSync(this);
         if (closed) throw new PortClosedException(port);
 
         size_t written = 0;
@@ -413,6 +427,7 @@ public:
     void[] read(void[] arr, Duration timeout=1.seconds,
                             Duration frameGap=4.msecs)
     {
+        auto fsync = FSync(this);
         if (closed) throw new PortClosedException(port);
 
         ptrdiff_t readed = 0;
@@ -483,7 +498,7 @@ protected:
     {
         void setUintBaudRate(uint br)
         {
-            version(usetermios2)
+            version (usetermios2)
             {
                 enum CBAUD  = octal!10017;
                 enum BOTHER = octal!10000;
@@ -563,11 +578,8 @@ protected:
             opt.c_oflag &= ~OPOST;
             opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
             opt.c_cflag &= ~(CSIZE | PARENB);
-            version (flowcontrol)
-            {
-                if (conf.hardwareDisableFlowControl)
-                    opt.c_cflag &= ~CRTSCTS;
-            }
+            if (conf.hardwareDisableFlowControl)
+                opt.c_cflag &= ~CRTSCTS;
             opt.c_cflag |= CS8;
 
             enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
@@ -581,7 +593,7 @@ protected:
                         GENERIC_READ | GENERIC_WRITE, 0, null,
                         OPEN_EXISTING, 0, null);
 
-            if(handle is INVALID_HANDLE_VALUE)
+            if (handle is INVALID_HANDLE_VALUE)
             {
                 auto err = GetLastError();
                 throw new SetupFailException(port,
