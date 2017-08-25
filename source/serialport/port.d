@@ -145,13 +145,13 @@ public:
     override string toString() { return port; }
 
     ///
-    SerialPort set(Parity p) { config = config.set(p); return this; }
+    SerialPort set(Parity p) { auto s = FSync(this); fusConfig = fusConfig.set(p); return this; }
     ///
-    SerialPort set(uint br) { config = config.set(br); return this; }
+    SerialPort set(uint br) { auto s = FSync(this); fusConfig = fusConfig.set(br); return this; }
     ///
-    SerialPort set(DataBits db) { config = config.set(db); return this; }
+    SerialPort set(DataBits db) { auto s = FSync(this); fusConfig = fusConfig.set(db); return this; }
     ///
-    SerialPort set(StopBits sb) { config = config.set(sb); return this; }
+    SerialPort set(StopBits sb) { auto s = FSync(this); fusConfig = fusConfig.set(sb); return this; }
 
     @property
     {
@@ -162,10 +162,8 @@ public:
             version (Windows) return handle is null;
         }
 
-        ///
-        Config config()
+        protected Config fusConfig()
         {
-            auto fsync = FSync(this);
             enforce(!closed, new PortClosedException(port));
 
             Config ret;
@@ -210,9 +208,14 @@ public:
         }
 
         ///
-        void config(Config c)
+        Config config()
         {
             auto fsync = FSync(this);
+            return fusConfig;
+        }
+
+        protected void fusConfig(Config c)
+        {
             if (closed) throw new PortClosedException(port);
 
             version (Posix)
@@ -264,7 +267,7 @@ public:
                 enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
                         new SerialPortException(format("Failed while call tcsetattr: %d", errno)));
 
-                auto test = config;
+                auto test = fusConfig;
 
                 enforce(test.baudRate == c.baudRate,
                             new BaudRateUnsupportedException(c.baudRate));
@@ -316,6 +319,12 @@ public:
             }
         }
 
+        void config(Config c)
+        {
+            auto fsync = FSync(this);
+            fusConfig = c;
+        }
+
         ///
         Parity parity() { return config.parity; }
         ///
@@ -326,13 +335,13 @@ public:
         StopBits stopBits() { return config.stopBits; }
 
         ///
-        Parity parity(Parity v) { config = config.set(v); return v; }
+        Parity parity(Parity v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
         ///
-        uint baudRate(uint v) { config = config.set(v); return v; }
+        uint baudRate(uint v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
         ///
-        DataBits dataBits(DataBits v) { config = config.set(v); return v; }
+        DataBits dataBits(DataBits v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
         ///
-        StopBits stopBits(StopBits v) { config = config.set(v); return v; }
+        StopBits stopBits(StopBits v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
 
         ///
         static string[] ports()
@@ -616,7 +625,7 @@ protected:
                         format("can't SetCommTimeouts with error: %d", GetLastError()));
         }
 
-        config = conf;
+        fusConfig = conf;
     }
 }
 
