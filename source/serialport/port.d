@@ -53,19 +53,6 @@ protected:
         return (cast(ulong)(10.0f / baudRate * 1e6)).usecs;
     }
 
-    int fiber_mutex;
-    struct FSync
-    {
-        int* mutex;
-        this(SerialPort sp)
-        {
-            mutex = &(sp.fiber_mutex);
-            while (*mutex) sp.sleep(0.msecs);
-            *mutex = 1;
-        }
-        ~this() { *mutex = 0; }
-    }
-
 public:
 
     ///
@@ -118,7 +105,6 @@ public:
     /// close handle
     void close()
     {
-        auto fsync = FSync(this);
         if (closed) return;
         version (Windows)
         {
@@ -135,7 +121,6 @@ public:
     ///
     void reopen(string port, Config cfg)
     {
-        auto fsync = FSync(this);
         if (!closed) close();
         this.port = port;
         setup(cfg);
@@ -145,13 +130,13 @@ public:
     override string toString() { return port; }
 
     ///
-    SerialPort set(Parity p) { auto s = FSync(this); fusConfig = fusConfig.set(p); return this; }
+    SerialPort set(Parity p) { config = config.set(p); return this; }
     ///
-    SerialPort set(uint br) { auto s = FSync(this); fusConfig = fusConfig.set(br); return this; }
+    SerialPort set(uint br) { config = config.set(br); return this; }
     ///
-    SerialPort set(DataBits db) { auto s = FSync(this); fusConfig = fusConfig.set(db); return this; }
+    SerialPort set(DataBits db) { config = config.set(db); return this; }
     ///
-    SerialPort set(StopBits sb) { auto s = FSync(this); fusConfig = fusConfig.set(sb); return this; }
+    SerialPort set(StopBits sb) { config = config.set(sb); return this; }
 
     @property
     {
@@ -162,7 +147,8 @@ public:
             version (Windows) return handle is null;
         }
 
-        protected Config fusConfig()
+        ///
+        Config config()
         {
             enforce(!closed, new PortClosedException(port));
 
@@ -208,13 +194,7 @@ public:
         }
 
         ///
-        Config config()
-        {
-            auto fsync = FSync(this);
-            return fusConfig;
-        }
-
-        protected void fusConfig(Config c)
+        void config(Config c)
         {
             if (closed) throw new PortClosedException(port);
 
@@ -267,7 +247,7 @@ public:
                 enforce(tcsetattr(handle, TCSANOW, &opt) != -1,
                         new SerialPortException(format("Failed while call tcsetattr: %d", errno)));
 
-                auto test = fusConfig;
+                auto test = config;
 
                 enforce(test.baudRate == c.baudRate,
                             new BaudRateUnsupportedException(c.baudRate));
@@ -319,12 +299,6 @@ public:
             }
         }
 
-        void config(Config c)
-        {
-            auto fsync = FSync(this);
-            fusConfig = c;
-        }
-
         ///
         Parity parity() { return config.parity; }
         ///
@@ -335,13 +309,13 @@ public:
         StopBits stopBits() { return config.stopBits; }
 
         ///
-        Parity parity(Parity v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
+        Parity parity(Parity v) { config = config.set(v); return v; }
         ///
-        uint baudRate(uint v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
+        uint baudRate(uint v) { config = config.set(v); return v; }
         ///
-        DataBits dataBits(DataBits v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
+        DataBits dataBits(DataBits v) { config = config.set(v); return v; }
         ///
-        StopBits stopBits(StopBits v) { auto s = FSync(this); fusConfig = fusConfig.set(v); return v; }
+        StopBits stopBits(StopBits v) { config = config.set(v); return v; }
 
         ///
         static string[] ports()
@@ -389,7 +363,6 @@ public:
     ///
     void write(const(void[]) arr, Duration timeout=500.usecs)
     {
-        auto fsync = FSync(this);
         if (closed) throw new PortClosedException(port);
 
         size_t written = 0;
@@ -436,7 +409,6 @@ public:
     void[] read(void[] arr, Duration timeout=1.seconds,
                             Duration frameGap=4.msecs)
     {
-        auto fsync = FSync(this);
         if (closed) throw new PortClosedException(port);
 
         ptrdiff_t readed = 0;
@@ -625,7 +597,7 @@ protected:
                         format("can't SetCommTimeouts with error: %d", GetLastError()));
         }
 
-        fusConfig = conf;
+        config = conf;
     }
 }
 
