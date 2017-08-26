@@ -60,10 +60,13 @@ int main(string[] args)
         {
             dots(true); writeln();
             stderr.writeln("error: ", e.msg);
+            Thread.sleep(100.msecs);
             continue;
         }
 
         writeln();
+        writeln("-- text\n", cast(string)tmp);
+        writeln("-- end\n\n-- data");
 
         size_t i;
         foreach (c; (cast(ubyte[])tmp).chunks(step))
@@ -74,7 +77,7 @@ int main(string[] args)
                     hex ~ " ".repeat(max(0,40-hex.length-1)).join, dec);
             i++;
         }
-        writefln("receive %d bytes", tmp.length);
+        writefln("-- end\n\nreceive %d bytes\n", tmp.length);
 
         dots(true);
     }
