@@ -361,17 +361,15 @@ public:
     }
 
     ///
-    void write(const(void[]) arr, Duration timeout=500.usecs)
+    void write(const(void[]) arr, Duration timeout=10.msecs)
     {
         if (closed) throw new PortClosedException(port);
 
         size_t written = 0;
 
-        StopWatch full;
-
         auto pause = ioPause();
 
-        full.start();
+        auto full = StopWatch(AutoStart.yes);
         while (written < arr.length)
         {
             ptrdiff_t res;
@@ -398,7 +396,7 @@ public:
 
             written += res;
 
-            if (full.peek().to!Duration > timeout)
+            if (full.peek.to!Duration > timeout)
                 throw new TimeoutException(port);
 
             sleep(pause);
@@ -407,7 +405,7 @@ public:
 
     ///
     void[] read(void[] arr, Duration timeout=1.seconds,
-                            Duration frameGap=4.msecs)
+                            Duration frameGap=50.msecs)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -455,7 +453,7 @@ public:
 
             if (res == 0)
             {
-                if (readed > 0 && silence.peek().to!Duration > frameGap)
+                if (readed > 0 && silence.peek.to!Duration > frameGap)
                     return arr[0..readed];
 
                 if (!silence.running) silence.start();
@@ -466,7 +464,7 @@ public:
                 silence.reset();
             }
 
-            if (readed == 0 && full.peek().to!Duration > timeout)
+            if (readed == 0 && full.peek.to!Duration > timeout)
                 throw new TimeoutException(port);
 
             sleep(pause);
