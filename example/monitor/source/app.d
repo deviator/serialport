@@ -52,7 +52,7 @@ int main(string[] args)
         void[] tmp;
         while(tmp.length == 0)
         {
-            tmp = com.readOnce(data);
+            tmp = com.read(data);
             Thread.sleep(500.msecs);
             dots();
         }

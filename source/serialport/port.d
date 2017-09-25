@@ -361,92 +361,7 @@ public:
     }
 
     ///
-    void write(const(void[]) arr, Duration timeout=10.msecs)
-    {
-        if (closed) throw new PortClosedException(port);
-
-        size_t written = 0;
-
-        auto pause = ioPause();
-
-        auto full = StopWatch(AutoStart.yes);
-        while (written < arr.length)
-        {
-            ptrdiff_t res;
-            auto ptr = arr.ptr + written;
-            auto len = arr.length - written;
-
-            version (Posix)
-            {
-                res = posixWrite(handle, ptr, len);
-                enforce(res >= 0, new WriteException(port, text("errno ", errno)));
-            }
-            version (Windows)
-            {
-                uint sres;
-                auto wfr = WriteFile(handle, ptr, cast(uint)len, &sres, null);
-                if (!wfr)
-                {
-                    auto err = GetLastError();
-                    if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
-                    else throw new WriteException(port, text("error ", err));
-                }
-                res = sres;
-            }
-
-            written += res;
-
-            if (full.peek.to!Duration > timeout)
-                throw new TimeoutException(port);
-
-            sleep(pause);
-        }
-    }
-
-    ///
-    void[] read(void[] arr, Duration timeout=1.seconds,
-                            Duration frameGap=50.msecs)
-    {
-        if (closed) throw new PortClosedException(port);
-
-        ptrdiff_t readed = 0;
-
-        auto pause = ioPause();
-
-        StopWatch silence, full;
-
-        full.start();
-        while (true)
-        {
-            enforce(readed <= arr.length,
-                    new SerialPortException("read more what can"));
-
-            auto res = readOnce(arr[readed..$]);
-
-            readed += res.length;
-
-            if (res.length == 0)
-            {
-                if (readed > 0 && silence.peek.to!Duration > frameGap)
-                    return arr[0..readed];
-
-                if (!silence.running) silence.start();
-            }
-            else
-            {
-                silence.stop();
-                silence.reset();
-            }
-
-            if (readed == 0 && full.peek.to!Duration > timeout)
-                throw new TimeoutException(port);
-
-            sleep(pause);
-        }
-    }
-
-    ///
-    void[] readOnce(void[] buf)
+    void[] read(void[] buf)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -479,6 +394,95 @@ public:
         }
 
         return buf[0..res];
+    }
+
+    ///
+    ptrdiff_t write(const(void[]) arr)
+    {
+        if (closed) throw new PortClosedException(port);
+
+        ptrdiff_t res;
+        auto ptr = arr.ptr;
+        auto len = arr.length;
+
+        version (Posix)
+        {
+            res = posixWrite(handle, ptr, len);
+            enforce(res >= 0, new WriteException(port, text("errno ", errno)));
+        }
+        version (Windows)
+        {
+            uint sres;
+            auto wfr = WriteFile(handle, ptr, cast(uint)len, &sres, null);
+            if (!wfr)
+            {
+                auto err = GetLastError();
+                if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
+                else throw new WriteException(port, text("error ", err));
+            }
+            res = sres;
+        }
+
+        return res;
+    }
+
+    ///
+    void[] readLoop(void[] arr, Duration timeout=1.seconds,
+                                Duration frameGap=50.msecs)
+    {
+        if (closed) throw new PortClosedException(port);
+
+        ptrdiff_t readed = 0;
+
+        auto pause = ioPause();
+
+        StopWatch silence, full;
+
+        full.start();
+        while (true)
+        {
+            enforce(readed <= arr.length,
+                    new SerialPortException("read more what can"));
+
+            auto res = read(arr[readed..$]).length;
+
+            readed += res;
+
+            if (res == 0)
+            {
+                if (readed > 0 && silence.peek.to!Duration > frameGap)
+                    return arr[0..readed];
+
+                if (!silence.running) silence.start();
+            }
+            else
+            {
+                silence.stop();
+                silence.reset();
+            }
+
+            if (readed == 0 && full.peek.to!Duration > timeout)
+                throw new TimeoutException(port);
+
+            sleep(pause);
+        }
+    }
+
+    ///
+    void writeLoop(const(void[]) arr, Duration timeout=10.msecs)
+    {
+        if (closed) throw new PortClosedException(port);
+        size_t written = write(arr);
+        if (written == arr.length) return;
+        auto pause = ioPause();
+        auto full = StopWatch(AutoStart.yes);
+        while (written < arr.length)
+        {
+            if (full.peek.to!Duration > timeout)
+                throw new TimeoutException(port);
+            written += write(arr[written..$]);
+            if (written < arr.length) sleep(pause);
+        }
     }
 
 protected:
