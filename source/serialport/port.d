@@ -420,38 +420,12 @@ public:
         {
             enforce(readed <= arr.length,
                     new SerialPortException("read more what can"));
-            size_t res;
 
-            auto ptr = arr.ptr + readed;
-            auto len = arr.length - readed;
+            auto res = readOnce(arr[readed..$]);
 
-            version (Posix)
-            {
-                auto sres = posixRead(handle, ptr, len);
+            readed += res.length;
 
-                if (sres < 0 && errno == EAGAIN) // no bytes for read, it's ok
-                    sres = 0;
-                else
-                    enforce(sres >= 0,
-                            new ReadException(port, text("errno ", errno)));
-                res = sres;
-            }
-            version (Windows)
-            {
-                uint sres;
-                auto rfr = ReadFile(handle, ptr, cast(uint)len, &sres, null);
-                if (!rfr)
-                {
-                    auto err = GetLastError();
-                    if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
-                    else throw new ReadException(port, text("error ", err));
-                }
-                res = sres;
-            }
-
-            readed += res;
-
-            if (res == 0)
+            if (res.length == 0)
             {
                 if (readed > 0 && silence.peek.to!Duration > frameGap)
                     return arr[0..readed];
@@ -469,6 +443,42 @@ public:
 
             sleep(pause);
         }
+    }
+
+    ///
+    void[] readOnce(void[] buf)
+    {
+        if (closed) throw new PortClosedException(port);
+
+        auto ptr = buf.ptr;
+        auto len = buf.length;
+
+        size_t res;
+
+        version (Posix)
+        {
+            auto sres = posixRead(handle, ptr, len);
+
+            // no bytes for read, it's ok
+            if (sres < 0 && errno == EAGAIN) sres = 0;
+            else enforce(sres >= 0,
+                    new ReadException(port, text("errno ", errno)));
+            res = sres;
+        }
+        version (Windows)
+        {
+            uint sres;
+            auto rfr = ReadFile(handle, ptr, cast(uint)len, &sres, null);
+            if (!rfr)
+            {
+                auto err = GetLastError();
+                if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
+                else throw new ReadException(port, text("error ", err));
+            }
+            res = sres;
+        }
+
+        return buf[0..res];
     }
 
 protected:

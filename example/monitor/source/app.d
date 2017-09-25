@@ -24,6 +24,7 @@ int main(string[] args)
 
     void dots(bool reset=false)
     {
+        if (pcount > 5) reset = true;
         if (reset)
         {
             auto w = " ".repeat(msg.length+pcount+40).join;
@@ -48,21 +49,14 @@ int main(string[] args)
 
     while (true)
     {
-        if (pcount>5) dots(true);
-        void[] tmp;
-        try tmp = com.read(data, 500.dur!"msecs");
-        catch (TimeoutException e)
+        size_t readed = 0;
+        while(readed == 0)
         {
+            readed = com.readOnce(data).length;
+            Thread.sleep(500.msecs);
             dots();
-            continue;
         }
-        catch (SerialPortException e)
-        {
-            dots(true); writeln();
-            stderr.writeln("error: ", e.msg);
-            Thread.sleep(100.msecs);
-            continue;
-        }
+        auto tmp = data[0..readed];
 
         writeln();
         writeln("-- text\n", cast(string)tmp);
