@@ -49,14 +49,13 @@ int main(string[] args)
 
     while (true)
     {
-        size_t readed = 0;
-        while(readed == 0)
+        void[] tmp;
+        while(tmp.length == 0)
         {
-            readed = com.readOnce(data).length;
+            tmp = com.readOnce(data);
             Thread.sleep(500.msecs);
             dots();
         }
-        auto tmp = data[0..readed];
 
         writeln();
         writeln("-- text\n", cast(string)tmp);
