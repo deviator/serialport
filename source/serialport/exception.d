@@ -1,3 +1,4 @@
+///
 module serialport.exception;
 
 import std.conv : text;

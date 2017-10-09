@@ -1,6 +1,6 @@
 ### SerialPort
 
-Library provides simple work with serial port for Posix and Windows.
+Library provides simple **async** work with serial port for Posix and Windows.
 
 Simple usage:
 
@@ -19,6 +19,7 @@ auto cnt = com.write(someDataArry);
 //                            write timeout
 com.writeLoop(someDataArray, 500.dur!"usecs");
 ```
+
 At the expiration of write timeout thows `TimeoutException`
 
 ```d
@@ -32,6 +33,8 @@ auto res2 = com.readLoop(bufferForReading, 500.dur!"msecs", 20.dur!"msecs");
 ```
 At the expiration of read timeout thows `TimeoutException` if no bytes readed.
 If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
+
+Example usage : [monitor](example/monitor)
 
 #### Warning: unix systems allow only standart speeds
 #### [0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]

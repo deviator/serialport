@@ -1,6 +1,7 @@
 .dub
 dub.selections.json
-docs.json
+docs*
+doc
 __dummy.html
 *.a
 *.o
@@ -8,5 +9,5 @@ __dummy.html
 *.dll
 *.obj
 *.exe
-*test-library
+*-test-*
 *~
