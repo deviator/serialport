@@ -1,6 +1,6 @@
 ### SerialPort
 
-Library provides simple **async** work with serial port for Posix and Windows.
+Library provides simple **non-blocking** work with serial port for Posix and Windows.
 
 Simple usage:
 
