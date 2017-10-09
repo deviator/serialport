@@ -321,6 +321,8 @@ public:
         ///
         StopBits stopBits(StopBits v) { config = config.set(v); return v; }
 
+        deprecated("use listAvailable() @property")
+        alias ports = listAvailable;
         ///
         static string[] listAvailable() @property
         {
