@@ -69,9 +69,13 @@ public:
 
         bool hardwareDisableFlowControl = true;
 
+        ///
         auto set(Parity v) { parity = v; return this; }
+        ///
         auto set(uint v) { baudRate = v; return this; }
+        ///
         auto set(DataBits v) { dataBits = v; return this; }
+        ///
         auto set(StopBits v) { stopBits = v; return this; }
     }
 
@@ -318,35 +322,18 @@ public:
         StopBits stopBits(StopBits v) { config = config.set(v); return v; }
 
         ///
-        static string[] ports()
+        static string[] listAvailable() @property
         {
             version (Posix)
             {
-                bool onlyComPorts(string n)
-                {
-                    static bool isInRange(T, U)(T v, U a, U b)
-                    { return a <= v && v <= b; }
-
-                    version (linux)   return n.startsWith("ttyUSB") ||
-                                             n.startsWith("ttyS");
-                    version (darwin)  return n.startsWith("cu");
-                    version (FreeBSD) return n.startsWith("cuaa") ||
-                                             n.startsWith("cuad");
-                    version (openbsd) return n.startsWith("tty");
-                    version (solaris) return n.startsWith("tty") &&
-                                             isInRange(n[$-1],'a','z');
-                }
-
-                return dirEntries("/dev/", SpanMode.shallow)
-                        .map!(a=>a.name.baseName)
-                        .filter!onlyComPorts
-                        .map!(a=>"/dev/" ~ a)
-                        .array;
+                import std.file : exists;
+                return dirEntries("/sys/class/tty", SpanMode.shallow)
+                        .map!(a=>"/dev/"~a.name.baseName)
+                        .filter!(a=>a.exists)
+                        .array.sort.array;
             }
             version (Windows)
             {
-                import std.algorithm : map;
-                import std.array : array;
                 import std.windows.registry;
                 return Registry
                         .localMachine()
