@@ -340,14 +340,17 @@ public:
             version (Windows)
             {
                 import std.windows.registry;
-                return Registry
+                auto vals = Registry
                         .localMachine()
                         .getKey("HARDWARE")
                         .getKey("DEVICEMAP")
                         .getKey("SERIALCOMM")
-                        .values
-                        .map!(a => a.valueSZ)
-                        .array;
+                        .values;
+
+                string[] arr;
+                foreach (v; vals)
+                    arr ~= v.value_SZ;
+                return arr;
             }
         }
     }
