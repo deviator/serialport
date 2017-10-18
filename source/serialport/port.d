@@ -187,12 +187,15 @@ public:
 
                 ret.baudRate = cast(uint)cfg.BaudRate;
 
-                ret.parity = [NOPARITY: Parity.none, ODDPARITY: Parity.odd,
-                              EVENPARITY: Parity.even][cfg.Parity];
+                enum pAA = [NOPARITY: Parity.none, ODDPARITY: Parity.odd,
+                            EVENPARITY: Parity.even];
 
-                ret.dataBits = [5: DataBits.data5, 6: DataBits.data6,
-                                7: DataBits.data7, 8: DataBits.data8]
-                                    .get(cfg.ByteSize, DataBits.data8);
+                ret.parity = pAA[cfg.Parity];
+
+                enum dbAA = [5: DataBits.data5, 6: DataBits.data6,
+                             7: DataBits.data7, 8: DataBits.data8];
+
+                ret.dataBits = dbAA.get(cfg.ByteSize, DataBits.data8);
 
                 ret.stopBits = cfg.StopBits == ONESTOPBIT ? StopBits.one : StopBits.two;
             }
@@ -340,16 +343,15 @@ public:
             version (Windows)
             {
                 import std.windows.registry;
-                auto vals = Registry
-                        .localMachine()
-                        .getKey("HARDWARE")
-                        .getKey("DEVICEMAP")
-                        .getKey("SERIALCOMM")
-                        .values;
-
                 string[] arr;
-                foreach (v; vals)
+                try foreach (v; Registry
+                                .localMachine()
+                                .getKey("HARDWARE")
+                                .getKey("DEVICEMAP")
+                                .getKey("SERIALCOMM")
+                                .values)
                     arr ~= v.value_SZ;
+                catch (Throwable e) .error(e.msg);
                 return arr;
             }
         }
