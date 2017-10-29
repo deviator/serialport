@@ -338,7 +338,10 @@ public:
                 return dirEntries("/sys/class/tty", SpanMode.shallow)
                         .map!(a=>"/dev/"~a.name.baseName)
                         .filter!(a=>a.exists)
-                        .array.sort.array;
+                        .array.sort.array
+                       ~
+                       dirEntries("/dev/pts", SpanMode.shallow)
+                        .map!(a=>a.name).array.sort.array;
             }
             version (Windows)
             {
