@@ -9,7 +9,7 @@ import std.experimental.logger;
 import std.path;
 import std.string;
 import core.time;
-import std.datetime;
+import std.datetime.stopwatch;
 
 import serialport.types;
 import serialport.exception;
