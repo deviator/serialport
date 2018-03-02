@@ -46,6 +46,11 @@ package
         alias posixRead = core.sys.posix.unistd.read;
         alias posixWrite = core.sys.posix.unistd.write;
         alias posixClose = core.sys.posix.unistd.close;
+
+        alias closeHandle = posixClose;
+        ///
+        alias SPHandle = int;
+        enum initHandle = -1;
     }
     version(Windows)
     {
@@ -112,6 +117,11 @@ package
             bool SetCommState(HANDLE hFile, DCB* lpDCB);
             bool SetCommTimeouts(HANDLE hFile, COMMTIMEOUTS* lpCommTimeouts);
         }
+
+        alias closeHandle = CloseHandle;
+        ///
+        alias SPHandle = HANDLE;
+        enum initHandle = null;
     }
 }
 

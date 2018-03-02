@@ -40,7 +40,7 @@ int main(string[] args)
         stdout.flush();
     }
 
-    auto com = new SerialPort(args[1], SerialPort.Config(9600));
+    auto com = new SerialPort(args[1], "9600:8N1");
 
     stdout.writeln("port config: ", com.config);
 

@@ -11,6 +11,8 @@ auto com = new SerialPort("/dev/ttyUSB0", 19200);
 com.config = SerialPort.Config(9600, Parity.none, DataBits.data8, StopBits.one)
 com.set(19200).set(DataBits.data8);
 com.stopBits = StopBits.two;
+// set 9600 baudrate, 8 data bits, no parity and one stop bit
+com.set("9600:8N1");
 
 // non-blocking write -- return writed bytes count at the first onset
 auto cnt = com.write(someDataArry);

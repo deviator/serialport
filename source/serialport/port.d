@@ -24,8 +24,7 @@ protected:
     ///
     string port;
 
-    version (Posix) int _handle = -1;
-    version (Windows) HANDLE _handle = null;
+    SPHandle _handle = initHandle;
 
     /// preform pause
     void sleep(Duration dt)
@@ -33,12 +32,12 @@ protected:
         if (sleepFunc !is null) sleepFunc(dt);
         else
         {
-            import core.thread;
+            import core.thread : Fiber, Thread;
             if (Fiber.getThis is null)
                 Thread.sleep(dt);
             else
             {
-                auto tm = StopWatch(AutoStart.yes);
+                const tm = StopWatch(AutoStart.yes);
                 while (tm.peek.to!Duration < dt) Fiber.yield();
             }
         }
@@ -54,17 +53,21 @@ protected:
 public:
 
     ///
+    static immutable string modeSplitChar=":";
+
+    ///
     static struct Config
     {
         ///
         uint baudRate=9600;
         ///
-        Parity parity=Parity.none;
-        ///
         DataBits dataBits=DataBits.data8;
+        ///
+        Parity parity=Parity.none;
         ///
         StopBits stopBits=StopBits.one;
 
+        ///
         bool hardwareDisableFlowControl = true;
 
         ///
@@ -75,17 +78,109 @@ public:
         auto set(DataBits v) { dataBits = v; return this; }
         ///
         auto set(StopBits v) { stopBits = v; return this; }
+        /++
+            use "B:XYZ"
+            where:
+                B is baud rate
+                X is data bits (5, 6, 7, 8)
+                Y is parity ('N' or 'n' -- none, 'E' or 'e' -- even, 'O' or 'o' -- odd)
+                Z is stop bits ('1', '1.5', '2')
+
+            example: "9600:8N1" "7o1.5" "2400:6e2"
+         +/
+        auto set(string mode)
+        {
+            auto errstr = "usupported mode '%s'".format(mode);
+            enforce(mode.length >= 3, new SerialPortException(errstr));
+
+            auto vals = mode.split(modeSplitChar);
+
+            if (vals.length == 0) return this;
+
+            if (vals.length > 2) throw new SerialPortException(errstr);
+
+            if (vals.length == 2)
+            {
+                if (vals[0].length)
+                    baudRate = vals[0].to!uint;
+                mode = vals[1];
+            }
+            else mode = vals[0];
+
+            auto db = cast(int)mode[0] - cast(int)'0';
+            if (db >= 5 && db <= 8) dataBits = cast(DataBits)db;
+            else throw new SerialPortException(errstr);
+
+            auto p = mode[1..2].toLower;
+            if (p == "n" || p == "o" || p == "e")
+            {
+                parity = ["n": Parity.none,
+                          "o": Parity.odd,
+                          "e": Parity.even][p];
+            }
+            else throw new SerialPortException(errstr);
+
+            auto sb = mode[2..$];
+            if (sb == "1" || sb == "1.5" || sb == "2")
+            {
+                stopBits = ["1": StopBits.one,
+                            "1.5": StopBits.onePointFive,
+                            "2": StopBits.two][sb];
+            }
+            else throw new SerialPortException(errstr);
+
+            return this;
+        }
+
+        /// seealso: set(string mode)
+        static Config parse(string mode)
+        {
+            Config ret;
+            ret.set(mode);
+            return ret;
+        }
+
+        ///
+        string mode() const @property
+        {
+            return "%d:%s%s%s".format(
+                baudRate,
+                dataBits.to!int,
+                [Parity.none: "n",
+                 Parity.odd:  "o",
+                 Parity.even: "e"][parity],
+                [StopBits.one: "1",
+                 StopBits.onePointFive: "1.5",
+                 StopBits.two: "2"
+                ][stopBits]
+            );
+        }
     }
 
     /// extended delegate for perform sleep
     void delegate(Duration dt) sleepFunc;
 
+    /// "/dev/ttyUSB0:9600:8N1"
+    this(string mode, void delegate(Duration) slp=null)
+    {
+        auto s = mode.split(modeSplitChar);
+        if (s.length == 0)
+            throw new SerialPortException(
+                "usupported serial port mode '%s'".format(mode));
+        this.port = s[0];
+        this.sleepFunc = slp;
+        Config conf;
+        if (s.length > 1)
+            conf.set(s[1..$].join(modeSplitChar));
+        setup(conf);
+    }
+
     ///
-    this(string port, Config conf=Config.init, void delegate(Duration) slp=null)
+    this(string port, string mode, void delegate(Duration) slp=null)
     {
         this.port = port;
         this.sleepFunc = slp;
-        setup(conf);
+        setup(Config.parse(mode));
     }
 
     ///
@@ -93,14 +188,16 @@ public:
     { this(port, Config(baudRate), slp); }
 
     ///
-    this(string port, uint baudRate, Parity parity, void delegate(Duration) slp=null)
-    { this(port, Config(baudRate, parity), slp); }
+    this(string port, uint baudRate, string mode, void delegate(Duration) slp=null)
+    { this(port, Config(baudRate).set(mode), slp); }
 
     ///
-    this(string port, uint baudRate, Parity parity,
-            DataBits dataBits,
-            StopBits stopBits, void delegate(Duration) slp=null)
-    { this(port, Config(baudRate, parity, dataBits, stopBits), slp); }
+    this(string port, Config conf, void delegate(Duration) slp=null)
+    {
+        this.port = port;
+        this.sleepFunc = slp;
+        setup(conf);
+    }
 
     ~this() { close(); }
 
@@ -108,22 +205,12 @@ public:
     void close()
     {
         if (closed) return;
-        version (Windows)
-        {
-            CloseHandle(_handle);
-            _handle = null;
-        }
-        version (Posix)
-        {
-            posixClose(_handle);
-            _handle = -1;
-        }
+        closeHandle(_handle);
+        _handle = initHandle;
     }
 
     ///
-    version (Posix) int handle() @property { return _handle; }
-    ///
-    version (Windows) HANDLE handle() @property { return _handle; }
+    SPHandle handle() const @property { return _handle; }
 
     ///
     void reopen(string port, Config cfg)
@@ -134,7 +221,7 @@ public:
     }
 
     ///
-    override string toString() { return port; }
+    override string toString() { return port ~ ":" ~ config.mode; }
 
     ///
     SerialPort set(Parity p) { config = config.set(p); return this; }
@@ -144,6 +231,8 @@ public:
     SerialPort set(DataBits db) { config = config.set(db); return this; }
     ///
     SerialPort set(StopBits sb) { config = config.set(sb); return this; }
+    ///
+    SerialPort set(string mode) { config = config.set(mode); return this; }
 
     @property
     {
@@ -187,13 +276,16 @@ public:
 
                 ret.baudRate = cast(uint)cfg.BaudRate;
 
-                enum pAA = [NOPARITY: Parity.none, ODDPARITY: Parity.odd,
-                            EVENPARITY: Parity.even];
+                static immutable pAA = [NOPARITY: Parity.none,
+                                        ODDPARITY: Parity.odd,
+                                        EVENPARITY: Parity.even];
 
                 ret.parity = pAA[cfg.Parity];
 
-                enum dbAA = [5: DataBits.data5, 6: DataBits.data6,
-                             7: DataBits.data7, 8: DataBits.data8];
+                static immutable dbAA = [5: DataBits.data5,
+                                         6: DataBits.data6,
+                                         7: DataBits.data7,
+                                         8: DataBits.data8];
 
                 ret.dataBits = dbAA.get(cfg.ByteSize, DataBits.data8);
 
@@ -280,8 +372,8 @@ public:
                             new BaudRateUnsupportedException(c.baudRate));
                 }
 
-                auto tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
-                                  Parity.even: EVENPARITY][c.parity];
+                const tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
+                                   Parity.even: EVENPARITY][c.parity];
                 if (cfg.Parity != tmpParity)
                 {
                     cfg.Parity = cast(ubyte)tmpParity;
@@ -289,9 +381,9 @@ public:
                             new ParityUnsupportedException(c.parity));
                 }
 
-                auto tmpStopBits = [StopBits.one: ONESTOPBIT,
-                                    StopBits.onePointFive: ONESTOPBIT,
-                                    StopBits.two: TWOSTOPBITS][c.stopBits];
+                const tmpStopBits = [StopBits.one: ONESTOPBIT,
+                                     StopBits.onePointFive: ONESTOPBIT,
+                                     StopBits.two: TWOSTOPBITS][c.stopBits];
 
                 if (cfg.StopBits != tmpStopBits)
                 {
@@ -345,7 +437,7 @@ public:
             }
             version (Windows)
             {
-                import std.windows.registry;
+                import std.windows.registry : Registry;
                 string[] arr;
                 try foreach (v; Registry
                                 .localMachine()
@@ -432,7 +524,7 @@ public:
     {
         if (closed) throw new PortClosedException(port);
 
-        ptrdiff_t readed = 0;
+        ptrdiff_t readed;
 
         auto pause = ioPause();
 
@@ -444,7 +536,7 @@ public:
             enforce(readed <= arr.length,
                     new SerialPortException("read more what can"));
 
-            auto res = read(arr[readed..$]).length;
+            const res = read(arr[readed..$]).length;
 
             readed += res;
 
@@ -475,7 +567,7 @@ public:
         size_t written = write(arr);
         if (written == arr.length) return;
         auto pause = ioPause();
-        auto full = StopWatch(AutoStart.yes);
+        const full = StopWatch(AutoStart.yes);
         while (written < arr.length)
         {
             if (full.peek.to!Duration > timeout)
@@ -614,3 +706,34 @@ protected:
 }
 
 private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
+
+unittest
+{
+    alias Cfg = SerialPort.Config;
+
+    Cfg c;
+    c.set("2400:7e1.5");
+    assertNotThrown(c.set(c.mode));
+    assert(c.baudRate == 2400);
+    assert(c.dataBits == DataBits.data7);
+    assert(c.parity == Parity.even);
+    assert(c.stopBits == StopBits.onePointFive);
+    c.set("8N1");
+    assertNotThrown(c.set(c.mode));
+    assert(c.baudRate == 2400);
+    assert(c.dataBits == DataBits.data8);
+    assert(c.parity == Parity.none);
+    assert(c.stopBits == StopBits.one);
+    c.set("320:5o2");
+    assertNotThrown(c.set(c.mode));
+    assert(c.baudRate == 320);
+    assert(c.dataBits == DataBits.data5);
+    assert(c.parity == Parity.odd);
+    assert(c.stopBits == StopBits.two);
+
+    assertThrown!SerialPortException(c.set("4o2"));
+    assertThrown!SerialPortException(c.set("5x2"));
+    assertThrown!SerialPortException(c.set("8e3"));
+    assertNotThrown!SerialPortException(c.set(":8N1"));
+    assertNotThrown(c.set(c.mode));
+}
