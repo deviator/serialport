@@ -27,18 +27,18 @@ auto res1 = com.read(bufferForReading);
 If you want use basic read/write loop you can use `SerialPortBL` class.
 
 ```d
+//                                                      vibe.core.sleep for example
+auto com = new SerialPortBL("/dev/ttyUSB0", "9600:8N1", sleepDelegate);
 //                            write timeout
 com.writeLoop(someDataArray, 500.dur!"usecs");
-```
 
-At the expiration of write timeout thows `TimeoutException`
-
-```d
 //                                          read timeout    frame end gap
 auto res2 = com.readLoop(bufferForReading, 500.dur!"msecs", 20.dur!"msecs");
 ```
 
-At the expiration of read timeout thows `TimeoutException` if no bytes readed.
+At expiration of write timeout throws `TimeoutException`.
+
+At expiration of read timeout throws `TimeoutException` if no bytes readed.
 If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
 
 Example usage : [monitor](example/monitor)
