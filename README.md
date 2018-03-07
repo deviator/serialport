@@ -24,11 +24,14 @@ auto res1 = com.read(bufferForReading);
 // res1 is slice of bufferForReading with readed data
 ```
 
+Example usage : [monitor](example/monitor)
+
 If you want use basic read/write loop you can use `SerialPortBL` class.
 
 ```d
 //                                                      vibe.core.sleep for example
 auto com = new SerialPortBL("/dev/ttyUSB0", "9600:8N1", sleepDelegate);
+
 //                            write timeout
 com.writeLoop(someDataArray, 500.dur!"usecs");
 
@@ -40,8 +43,6 @@ At expiration of write timeout throws `TimeoutException`.
 
 At expiration of read timeout throws `TimeoutException` if no bytes readed.
 If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
-
-Example usage : [monitor](example/monitor)
 
 #### Warning: unix systems allow only standart speeds
 #### [0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]
