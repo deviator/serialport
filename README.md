@@ -17,9 +17,16 @@ com.stopBits = StopBits.two;
 com.set("9600:8N1");
 
 // non-blocking write -- return writed bytes count at the first onset
-auto cnt = com.write(someDataArry);
+auto cnt = com.write(someDataArray);
 
-// if you need send all bytes in someDataArray
+// non-blocking read -- return data in system serial port buffer
+auto res1 = com.read(bufferForReading);
+// res1 is slice of bufferForReading with readed data
+```
+
+If you want use basic read/write loop you can use `SerialPortBL` class.
+
+```d
 //                            write timeout
 com.writeLoop(someDataArray, 500.dur!"usecs");
 ```
@@ -27,14 +34,10 @@ com.writeLoop(someDataArray, 500.dur!"usecs");
 At the expiration of write timeout thows `TimeoutException`
 
 ```d
-// non-blocking read -- return data in system serial port buffer
-auto res1 = com.read(bufferForReading);
-// res1 is slice of bufferForReading with readed data
-
-// if you need read message with known timeouts
 //                                          read timeout    frame end gap
 auto res2 = com.readLoop(bufferForReading, 500.dur!"msecs", 20.dur!"msecs");
 ```
+
 At the expiration of read timeout thows `TimeoutException` if no bytes readed.
 If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
 

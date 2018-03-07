@@ -5,7 +5,7 @@ import std.conv : text;
 
 import serialport.types;
 
-///
+/// General
 class SerialPortException : Exception
 {
     ///
@@ -15,7 +15,7 @@ class SerialPortException : Exception
 }
 
 ///
-class UnsupportedException : SerialPortException
+class ParseModeException : SerialPortException
 {
     ///
     this(string msg, string file=__FILE__, size_t line=__LINE__)
@@ -23,60 +23,29 @@ class UnsupportedException : SerialPortException
     { super(msg, file, line); }
 }
 
-///
-class BaudRateUnsupportedException : UnsupportedException
+/// Unsupported config
+class UnsupportedException : SerialPortException
 {
     ///
-    uint baudRate;
+    this(string msg, string file=__FILE__, size_t line=__LINE__)
+        @safe pure nothrow @nogc
+    { super(msg, file, line); }
 
     ///
     this(uint br, string file=__FILE__, size_t line=__LINE__)
-    {
-        baudRate = br;
-        super(text("Unsupported baudrate ", br), file, line);
-    }
-}
-
-///
-class ParityUnsupportedException : UnsupportedException
-{
-    ///
-    Parity parity;
+    { this(text("Unsupported baudrate ", br), file, line); }
 
     ///
     this(Parity p, string file=__FILE__, size_t line=__LINE__)
-    {
-        parity = p;
-        super(text("Unsupported parity ", p), file, line);
-    }
-}
-
-///
-class DataBitsUnsupportedException : UnsupportedException
-{
-    ///
-    DataBits dataBits;
+    { this(text("Unsupported parity ", p), file, line); }
 
     ///
     this(DataBits db, string file=__FILE__, size_t line=__LINE__)
-    {
-        dataBits = db;
-        super(text("Unsupported data bits ", db), file, line);
-    }
-}
-
-///
-class StopBitsUnsupportedException : UnsupportedException
-{
-    ///
-    StopBits stopBits;
+    { this(text("Unsupported data bits ", db), file, line); }
 
     ///
     this(StopBits sb, string file=__FILE__, size_t line=__LINE__)
-    {
-        stopBits = sb;
-        super(text("Unsupported stop bits ", sb), file, line);
-    }
+    { this(text("Unsupported stop bits ", sb), file, line); }
 }
 
 ///
@@ -109,7 +78,7 @@ class SetupFailException : SerialPortException
     }
 }
 
-///
+/// Base for timeout, read and write exceptions
 class IOException : SerialPortException
 {
     ///

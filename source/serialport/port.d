@@ -26,30 +26,6 @@ protected:
 
     SPHandle _handle = initHandle;
 
-    /// preform pause
-    void sleep(Duration dt)
-    {
-        if (sleepFunc !is null) sleepFunc(dt);
-        else
-        {
-            import core.thread : Fiber, Thread;
-            if (Fiber.getThis is null)
-                Thread.sleep(dt);
-            else
-            {
-                const tm = StopWatch(AutoStart.yes);
-                while (tm.peek.to!Duration < dt) Fiber.yield();
-            }
-        }
-    }
-
-    Duration ioPause()
-    {
-        // approx theoretical time for receive or send
-        // one byte (8 bit + 1 start bit + 1 stop bit)
-        return (cast(ulong)(10.0f / baudRate * 1e6)).usecs;
-    }
-
 public:
 
     ///
@@ -70,46 +46,75 @@ public:
         ///
         bool hardwareDisableFlowControl = true;
 
-        ///
+        /++ Set parity value
+            Returns: this
+         +/
         auto set(Parity v) { parity = v; return this; }
-        ///
+
+        /++ Set baudrate value
+            Returns: this
+         +/
         auto set(uint v) { baudRate = v; return this; }
-        ///
+
+        /++ Set data bits value
+            Returns: this
+         +/
         auto set(DataBits v) { dataBits = v; return this; }
-        ///
+
+        /++ Set stop bits value
+            Returns: this
+         +/
         auto set(StopBits v) { stopBits = v; return this; }
+
         /++
-            use "B:XYZ"
+            Use mode string for setting baudrate, data bits, parity and stop bits.
+
+            Format: "B:DPS"
             where:
                 B is baud rate
-                X is data bits (5, 6, 7, 8)
-                Y is parity ('N' or 'n' -- none, 'E' or 'e' -- even, 'O' or 'o' -- odd)
-                Z is stop bits ('1', '1.5', '2')
+                D is data bits (5, 6, 7, 8)
+                P is parity ('N' or 'n' -- none,
+                             'E' or 'e' -- even,
+                             'O' or 'o' -- odd)
+                S is stop bits ('1', '1.5', '2')
 
-            example: "9600:8N1" "7o1.5" "2400:6e2"
+            You can skip baudrate.
+
+            example mode strings: "9600:8N1" ":8n1" "7o1.5" "2400:6e2"
+
+            Throws:
+                ParseModeException if mode string is badly formatted or using bad values
          +/
         auto set(string mode)
         {
-            auto errstr = "usupported mode '%s'".format(mode);
-            enforce(mode.length >= 3, new SerialPortException(errstr));
+            alias PME = ParseModeException;
+
+            auto errstr = "error mode '%s'".format(mode);
+            enforce(mode.length >= 3, new PME(errstr ~ ": too short"));
 
             auto vals = mode.split(modeSplitChar);
 
             if (vals.length == 0) return this;
 
-            if (vals.length > 2) throw new SerialPortException(errstr);
+            if (vals.length > 2)
+                throw new PME(errstr ~ ": many parts");
 
             if (vals.length == 2)
             {
                 if (vals[0].length)
-                    baudRate = vals[0].to!uint;
+                {
+                    try baudRate = vals[0].to!uint;
+                    catch (Exception e)
+                        throw new PME(errstr ~
+                                ": baud rate parse error: " ~ e.msg);
+                }
                 mode = vals[1];
             }
             else mode = vals[0];
 
             auto db = cast(int)mode[0] - cast(int)'0';
             if (db >= 5 && db <= 8) dataBits = cast(DataBits)db;
-            else throw new SerialPortException(errstr);
+            else throw new PME(errstr ~ ": unsupported data bits '" ~ mode[0] ~ "'");
 
             auto p = mode[1..2].toLower;
             if (p == "n" || p == "o" || p == "e")
@@ -118,7 +123,7 @@ public:
                           "o": Parity.odd,
                           "e": Parity.even][p];
             }
-            else throw new SerialPortException(errstr);
+            else throw new PME(errstr ~ ": unsupported parity '" ~ p ~ "'");
 
             auto sb = mode[2..$];
             if (sb == "1" || sb == "1.5" || sb == "2")
@@ -127,12 +132,48 @@ public:
                             "1.5": StopBits.onePointFive,
                             "2": StopBits.two][sb];
             }
-            else throw new SerialPortException(errstr);
+            else throw new PME(errstr ~ ": unsupported stop bits '" ~ sb ~ "'");
 
             return this;
         }
 
-        /// seealso: set(string mode)
+        ///
+        unittest
+        {
+            Config c;
+            c.set("2400:7e1.5");
+            assertNotThrown(c.set(c.mode));
+            assert(c.baudRate == 2400);
+            assert(c.dataBits == DataBits.data7);
+            assert(c.parity == Parity.even);
+            assert(c.stopBits == StopBits.onePointFive);
+            c.set("8N1");
+            assertNotThrown(c.set(c.mode));
+            assert(c.baudRate == 2400);
+            assert(c.dataBits == DataBits.data8);
+            assert(c.parity == Parity.none);
+            assert(c.stopBits == StopBits.one);
+            c.set("320:5o2");
+            assertNotThrown(c.set(c.mode));
+            assert(c.baudRate == 320);
+            assert(c.dataBits == DataBits.data5);
+            assert(c.parity == Parity.odd);
+            assert(c.stopBits == StopBits.two);
+
+            alias PME = ParseModeException;
+            assertThrown!PME(c.set("4o2"));
+            assertThrown!PME(c.set("5x2"));
+            assertThrown!PME(c.set("8e3"));
+            assertNotThrown!PME(c.set(":8N1"));
+            assertNotThrown(c.set(c.mode));
+        }
+
+        /++ Construct config, parse mode to it and return.
+
+            Returns: new config
+
+            See_Also: set(string mode)
+         +/
         static Config parse(string mode)
         {
             Config ret;
@@ -140,10 +181,17 @@ public:
             return ret;
         }
 
-        ///
+        /++ Build mode string.
+
+            Can be used for parsing.
+
+            Returns: mode string
+
+            See_Also: parse, set(string mode)
+         +/
         string mode() const @property
         {
-            return "%d:%s%s%s".format(
+            return "%s:%s%s%s".format(
                 baudRate,
                 dataBits.to!int,
                 [Parity.none: "n",
@@ -157,45 +205,61 @@ public:
         }
     }
 
-    /// extended delegate for perform sleep
-    void delegate(Duration dt) sleepFunc;
+    /++ Construct SerialPort using extend mode string.
 
-    /// "/dev/ttyUSB0:9600:8N1"
-    this(string mode, void delegate(Duration) slp=null)
+        First part of extend mode string must have port name
+        (e.g. "com1" or "/dev/ttyUSB0"), second part is equal
+        to config mode string. Parts separates by `modeSplitChar` (`:`).
+
+        Example extend mode string: "/dev/ttyUSB0:9600:8N1"
+
+        Params:
+            exmode = extend mode string
+
+        See_Also: Config.parse, Config.set(string mode)
+
+        Throws:
+            ParseModeException
+     +/
+    this(string exmode)
     {
-        auto s = mode.split(modeSplitChar);
-        if (s.length == 0)
-            throw new SerialPortException(
-                "usupported serial port mode '%s'".format(mode));
-        this.port = s[0];
-        this.sleepFunc = slp;
-        Config conf;
-        if (s.length > 1)
-            conf.set(s[1..$].join(modeSplitChar));
-        setup(conf);
+        auto s = exmode.split(modeSplitChar);
+
+        if (s.length == 0) throw new ParseModeException("empty mode");
+
+        this(s[0], s.length > 1 ? Config.parse(s[1..$].join(modeSplitChar)) : Config.init);
     }
 
+    /++ Construct SerialPort using port name and mode string.
+
+        Params:
+            port = port name
+            mode = config mode string
+
+        See_Also: Config.parse, Config.set(string mode)
+     +/
+    this(string port, string mode) { this(port, Config.parse(mode)); }
+
+    /++ Params:
+            port = port name
+            baudRate = baudrate
+     +/
+    this(string port, uint baudRate) { this(port, Config(baudRate)); }
+
+    /++ Params:
+            port = port name
+            baudRate = baudrate
+            mode = config mode string
+
+        See_Also: Config.parse, Config.set(string mode)
+     +/
+    this(string port, uint baudRate, string mode)
+    { this(port, Config(baudRate).set(mode)); }
+
     ///
-    this(string port, string mode, void delegate(Duration) slp=null)
+    this(string port, Config conf)
     {
         this.port = port;
-        this.sleepFunc = slp;
-        setup(Config.parse(mode));
-    }
-
-    ///
-    this(string port, uint baudRate, void delegate(Duration) slp=null)
-    { this(port, Config(baudRate), slp); }
-
-    ///
-    this(string port, uint baudRate, string mode, void delegate(Duration) slp=null)
-    { this(port, Config(baudRate).set(mode), slp); }
-
-    ///
-    this(string port, Config conf, void delegate(Duration) slp=null)
-    {
-        this.port = port;
-        this.sleepFunc = slp;
         setup(conf);
     }
 
@@ -208,6 +272,9 @@ public:
         closeHandle(_handle);
         _handle = initHandle;
     }
+
+    ///
+    string name() const @property { return port; }
 
     ///
     SPHandle handle() const @property { return _handle; }
@@ -239,11 +306,11 @@ public:
         ///
         bool closed() const
         {
-            version (Posix) return _handle == -1;
-            version (Windows) return _handle is null;
+            version (Posix) return _handle == initHandle;
+            version (Windows) return _handle is initHandle;
         }
 
-        ///
+        /// Get config
         Config config()
         {
             enforce(!closed, new PortClosedException(port));
@@ -295,9 +362,10 @@ public:
             return ret;
         }
 
-        ///
+        /// Set config
         void config(Config c)
         {
+            alias UE = UnsupportedException;
             if (closed) throw new PortClosedException(port);
 
             version (Posix)
@@ -340,8 +408,7 @@ public:
                     case DataBits.data7: opt.c_cflag |= CS7; break;
                     case DataBits.data8: opt.c_cflag |= CS8; break;
                     default:
-                        errorf("config dataBits is setted as %d, set default CS8",
-                                c.dataBits);
+                        errorf("config dataBits is setted as %d, set default CS8", c.dataBits);
                         opt.c_cflag |= CS8;
                         break;
                 }
@@ -350,15 +417,10 @@ public:
                         new SerialPortException(format("Failed while call tcsetattr: %d", errno)));
 
                 auto test = config;
-
-                enforce(test.baudRate == c.baudRate,
-                            new BaudRateUnsupportedException(c.baudRate));
-                enforce(test.parity == c.parity,
-                            new ParityUnsupportedException(c.parity));
-                enforce(test.stopBits == c.stopBits,
-                            new StopBitsUnsupportedException(c.stopBits));
-                enforce(test.dataBits == c.dataBits,
-                            new DataBitsUnsupportedException(c.dataBits));
+                enforce(test.baudRate == c.baudRate, new UE(c.baudRate));
+                enforce(test.parity   == c.parity,   new UE(c.parity));
+                enforce(test.stopBits == c.stopBits, new UE(c.stopBits));
+                enforce(test.dataBits == c.dataBits, new UE(c.dataBits));
             }
             version (Windows)
             {
@@ -369,7 +431,7 @@ public:
                 {
                     cfg.BaudRate = cast(DWORD)c.baudRate;
                     enforce(SetCommState(_handle, &cfg),
-                            new BaudRateUnsupportedException(c.baudRate));
+                            new UE(c.baudRate));
                 }
 
                 const tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
@@ -378,7 +440,7 @@ public:
                 {
                     cfg.Parity = cast(ubyte)tmpParity;
                     enforce(SetCommState(_handle, &cfg),
-                            new ParityUnsupportedException(c.parity));
+                            new UE(c.parity));
                 }
 
                 const tmpStopBits = [StopBits.one: ONESTOPBIT,
@@ -389,14 +451,14 @@ public:
                 {
                     cfg.StopBits = cast(ubyte)tmpStopBits;
                     enforce(SetCommState(_handle, &cfg),
-                            new StopBitsUnsupportedException(c.stopBits));
+                            new UE(c.stopBits));
                 }
 
                 if (cfg.ByteSize != cast(typeof(cfg.ByteSize))c.dataBits)
                 {
                     cfg.ByteSize = cast(typeof(cfg.ByteSize))c.dataBits;
                     enforce(SetCommState(_handle, &cfg),
-                            new DataBitsUnsupportedException(c.dataBits));
+                            new UE(c.dataBits));
                 }
             }
         }
@@ -419,9 +481,8 @@ public:
         ///
         StopBits stopBits(StopBits v) { config = config.set(v); return v; }
 
-        deprecated("use listAvailable() @property")
-        alias ports = listAvailable;
-        ///
+        /++ List available serial ports in system
+         +/
         static string[] listAvailable() @property
         {
             version (Posix)
@@ -452,7 +513,17 @@ public:
         }
     }
 
-    ///
+    /++ Read data from port
+
+        Params:
+            buf = buffer for reading
+
+        Returns: slice of buf
+
+        Throws:
+            PortClosedException if port closed
+            ReadException if read error occurs
+     +/
     void[] read(void[] buf)
     {
         if (closed) throw new PortClosedException(port);
@@ -488,7 +559,17 @@ public:
         return buf[0..res];
     }
 
-    ///
+    /++ Write data to port
+
+        Params:
+            arr = writed data
+        
+        Returns: count of writen bytes
+
+        Throws:
+            PortClosedException if port closed
+            WriteException if read error occurs
+     +/
     ptrdiff_t write(const(void[]) arr)
     {
         if (closed) throw new PortClosedException(port);
@@ -518,9 +599,246 @@ public:
         return res;
     }
 
+protected:
+
+    alias SFE = SetupFailException;
+
+    version (Posix)
+    {
+        void setUintBaudRate(uint br)
+        {
+            version (usetermios2)
+            {
+                enum CBAUD  = octal!10017;
+                enum BOTHER = octal!10000;
+
+                termios2 opt2;
+                enforce(ioctl(_handle, TCGETS2, &opt2) != -1,
+                        new SFE(port, "can't get termios2 options"));
+                opt2.c_cflag &= ~CBAUD; //Remove current BAUD rate
+                opt2.c_cflag |= BOTHER; //Allow custom BAUD rate using int input
+                opt2.c_ispeed = br;     //Set the input BAUD rate
+                opt2.c_ospeed = br;     //Set the output BAUD rate
+                ioctl(_handle, TCSETS2, &opt2);
+            }
+            else
+            {
+                enforce(br in unixBaudList, new UnsupportedException(br));
+
+                auto baud = unixBaudList[br];
+
+                termios opt;
+                enforce(tcgetattr(_handle, &opt) != -1,
+                    new SFE(port, "can't get termios options"));
+
+                //cfsetispeed(&opt, B0);
+                cfsetospeed(&opt, baud);
+
+                enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
+                        new SFE(port, "Failed while call tcsetattr"));
+            }
+        }
+
+        uint getUintBaudRate()
+        {
+            version (usetermios2)
+            {
+                termios2 opt2;
+                enforce(ioctl(_handle, TCGETS2, &opt2) != -1,
+                        new SFE(port, "can't get termios2 options"));
+                return opt2.c_ospeed;
+            }
+            else
+            {
+                termios opt;
+                enforce(tcgetattr(_handle, &opt) != -1,
+                    new SFE(port, "can't get termios options"));
+                auto b = cfgetospeed(&opt);
+                if (b !in unixUintBaudList)
+                {
+                    warningf("unknown baud speed setted: %s", b);
+                    return 0;
+                }
+                return unixUintBaudList[b];
+            }
+        }
+    }
+
+    /// open handler, set new config
+    final void setup(Config conf)
+    {
+        enforce(port.length, new SFE(port, "zero length name"));
+
+        version (Posix)
+        {
+            _handle = open(port.toStringz(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+            enforce(_handle != -1,
+                    new SFE(port, format("Can't open port (errno %d)", errno)));
+
+            termios opt;
+            enforce(tcgetattr(_handle, &opt) != -1,
+                new SFE(port, "can't get termios options"));
+
+            // make raw
+            opt.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP |
+                             INLCR | IGNCR | ICRNL | IXON);
+            opt.c_oflag &= ~OPOST;
+            opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+            opt.c_cflag &= ~(CSIZE | PARENB);
+            if (conf.hardwareDisableFlowControl)
+                opt.c_cflag &= ~CRTSCTS;
+            opt.c_cflag |= CS8;
+
+            enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
+                    new SFE(port, format("Failed while" ~
+                            " call tcsetattr (errno %d)", errno)));
+        }
+        else version (Windows)
+        {
+            auto fname = `\\.\` ~ port;
+            _handle = CreateFileA(fname.toStringz,
+                        GENERIC_READ | GENERIC_WRITE, 0, null,
+                        OPEN_EXISTING, 0, null);
+
+            enforce(_handle !is INVALID_HANDLE_VALUE,
+                new SFE(port, format("can't CreateFileA '%s' with error: %d",
+                        fname, GetLastError())));
+
+            SetupComm(_handle, 4096, 4096);
+            PurgeComm(_handle, PURGE_TXABORT | PURGE_TXCLEAR |
+                               PURGE_RXABORT | PURGE_RXCLEAR);
+
+            COMMTIMEOUTS tm;
+            tm.ReadIntervalTimeout         = DWORD.max;
+            tm.ReadTotalTimeoutMultiplier  = 0;
+            tm.ReadTotalTimeoutConstant    = 0;
+            tm.WriteTotalTimeoutMultiplier = 0;
+            tm.WriteTotalTimeoutConstant   = 0;
+
+            enforce(SetCommTimeouts(_handle, &tm) != 0,
+                new SFE(port, format("can't SetCommTimeouts with error: %d", GetLastError())));
+        }
+
+        config = conf;
+    }
+}
+
+private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
+
+/// Serial port with basic loops
+class SerialPortBL : SerialPort
+{
+protected:
+
+    /++ Preform pause
+
+        If sleepFunc isn't null call it. Else use `Thread.sleep` or
+        `Fiber.yield` if code executes in fiber.
+
+        Params:
+            dt = sleep time
+     +/
+    void sleep(Duration dt)
+    {
+        if (sleepFunc !is null) sleepFunc(dt);
+        else
+        {
+            import core.thread : Fiber, Thread;
+            if (Fiber.getThis is null) Thread.sleep(dt);
+            else
+            {
+                const tm = StopWatch(AutoStart.yes);
+                while (tm.peek.to!Duration < dt) Fiber.yield();
+            }
+        }
+    }
+
+    /++ Calc pause for sleep in read and write loops
+     +/
+    Duration ioPause()
+    {
+        // approx theoretical time for receive or send
+        // one byte (8 bit + 1 start bit + 1 stop bit)
+        return (cast(ulong)(10.0f / baudRate * 1e6)).usecs;
+    }
+
+public:
+    /// extended delegate for perform sleep
+    void delegate(Duration dt) sleepFunc;
+
+    /++ Construct SerialPortBL using extend mode string.
+
+        Extend mode string must have port name (e.g. "com1" or "/dev/ttyUSB0")
+
+        Example extend mode string: "/dev/ttyUSB0:9600:8N1"
+
+        Params:
+            exmode = extend mode string
+            slp = sleep delegate
+
+        See_Also: SerialPort.this(string exmode), Config.parse, Config.set(string mode)
+     +/
+    this(string exmode, void delegate(Duration) slp=null)
+    {
+        this.sleepFunc = slp;
+        super(exmode);
+    }
+
+    /++ Params:
+            port = port name
+            mode = config mode string
+            slp = sleep delegate
+
+        See_Also: Config.parse, Config.set(string mode)
+     +/
+    this(string port, string mode, void delegate(Duration) slp=null)
+    { this(port, Config.parse(mode), slp); }
+
+    /++ Params:
+            port = port name
+            baudRate = baudrate
+            slp = sleep delegate
+     +/
+    this(string port, uint baudRate, void delegate(Duration) slp=null)
+    { this(port, Config(baudRate), slp); }
+
+    /++ Params:
+            port = port name
+            baudRate = baudrate
+            mode = config mode string
+            slp = sleep delegate
+
+        See_Also: Config.parse, Config.set(string mode)
+     +/
+    this(string port, uint baudRate, string mode, void delegate(Duration) slp=null)
+    { this(port, Config(baudRate).set(mode), slp); }
+
     ///
+    this(string port, Config conf, void delegate(Duration) slp=null)
+    {
+        this.sleepFunc = slp;
+        super(port, conf);
+    }
+
+    /++ Read data by parts, sleep between checks.
+
+        Sleep time calculates from baud rate and count of bits in one byte.
+
+        Params:
+            arr = buffer for reading
+            timeout = timeout for first byte recive
+            frameGap = detect new data frame (return current) by silence period
+
+        Returns: slice of arr
+
+        Throws:
+            PortClosedException
+            ReadException
+
+        See_Also: SerialPort.read
+     +/
     void[] readLoop(void[] arr, Duration timeout=1.seconds,
-                                Duration frameGap=50.msecs)
+                                     Duration frameGap=50.msecs)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -533,6 +851,7 @@ public:
         full.start();
         while (true)
         {
+            // TODO: maybe return readed data?
             enforce(readed <= arr.length,
                     new SerialPortException("read more what can"));
 
@@ -560,7 +879,19 @@ public:
         }
     }
 
-    ///
+    /++ Write all data by parts
+
+        Params:
+            arr = data for writing
+            timeout = time for writing data
+
+        Throws:
+            PortClosedException
+            WriteException
+            TimeoutException if full write time is out
+
+        See_Also: SerialPort.write
+     +/
     void writeLoop(const(void[]) arr, Duration timeout=10.msecs)
     {
         if (closed) throw new PortClosedException(port);
@@ -576,164 +907,4 @@ public:
             if (written < arr.length) sleep(pause);
         }
     }
-
-protected:
-
-    version (Posix)
-    {
-        void setUintBaudRate(uint br)
-        {
-            version (usetermios2)
-            {
-                enum CBAUD  = octal!10017;
-                enum BOTHER = octal!10000;
-
-                termios2 opt2;
-                enforce(ioctl(_handle, TCGETS2, &opt2) != -1,
-                        new SetupFailException(port, "can't get termios2 options"));
-                opt2.c_cflag &= ~CBAUD; //Remove current BAUD rate
-                opt2.c_cflag |= BOTHER; //Allow custom BAUD rate using int input
-                opt2.c_ispeed = br;     //Set the input BAUD rate
-                opt2.c_ospeed = br;     //Set the output BAUD rate
-                ioctl(_handle, TCSETS2, &opt2);
-            }
-            else
-            {
-                enforce(br in unixBaudList,
-                        new BaudRateUnsupportedException(br));
-
-                auto baud = unixBaudList[br];
-
-                termios opt;
-                enforce(tcgetattr(_handle, &opt) != -1,
-                    new SerialPortException(port, "can't get termios options"));
-
-                //cfsetispeed(&opt, B0);
-                cfsetospeed(&opt, baud);
-
-                enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
-                        new SerialPortException("Failed while call tcsetattr"));
-            }
-        }
-
-        uint getUintBaudRate()
-        {
-            version (usetermios2)
-            {
-                termios2 opt2;
-                enforce(ioctl(_handle, TCGETS2, &opt2) != -1,
-                        new SetupFailException(port, "can't get termios2 options"));
-                return opt2.c_ospeed;
-            }
-            else
-            {
-                termios opt;
-                enforce(tcgetattr(_handle, &opt) != -1,
-                    new SerialPortException(port, "can't get termios options"));
-                auto b = cfgetospeed(&opt);
-                if (b !in unixUintBaudList)
-                {
-                    warningf("unknown baud speed setted: %s", b);
-                    return 0;
-                }
-                return unixUintBaudList[b];
-            }
-        }
-    }
-
-    /// open handler, set new config
-    final void setup(Config conf)
-    {
-        enforce(port.length, new SetupFailException(port, "zero length name"));
-
-        version (Posix)
-        {
-            _handle = open(port.toStringz(), O_RDWR | O_NOCTTY | O_NONBLOCK);
-            enforce(_handle != -1,
-                    new SetupFailException(port,
-                        format("Can't open port (errno %d)", errno)));
-
-            termios opt;
-            enforce(tcgetattr(_handle, &opt) != -1,
-                new SetupFailException(port, "can't get termios options"));
-
-            // make raw
-            opt.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP |
-                             INLCR | IGNCR | ICRNL | IXON);
-            opt.c_oflag &= ~OPOST;
-            opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-            opt.c_cflag &= ~(CSIZE | PARENB);
-            if (conf.hardwareDisableFlowControl)
-                opt.c_cflag &= ~CRTSCTS;
-            opt.c_cflag |= CS8;
-
-            enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
-                    new SetupFailException(format("Failed while" ~
-                            " call tcsetattr (errno %d)", errno)));
-        }
-        else version (Windows)
-        {
-            auto fname = `\\.\` ~ port;
-            _handle = CreateFileA(fname.toStringz,
-                        GENERIC_READ | GENERIC_WRITE, 0, null,
-                        OPEN_EXISTING, 0, null);
-
-            if (_handle is INVALID_HANDLE_VALUE)
-            {
-                auto err = GetLastError();
-                throw new SetupFailException(port,
-                        format("can't CreateFileA '%s' with error: %d", fname, err));
-            }
-
-            SetupComm(_handle, 4096, 4096);
-            PurgeComm(_handle, PURGE_TXABORT | PURGE_TXCLEAR |
-                               PURGE_RXABORT | PURGE_RXCLEAR);
-
-            COMMTIMEOUTS tm;
-            tm.ReadIntervalTimeout         = DWORD.max;
-            tm.ReadTotalTimeoutMultiplier  = 0;
-            tm.ReadTotalTimeoutConstant    = 0;
-            tm.WriteTotalTimeoutMultiplier = 0;
-            tm.WriteTotalTimeoutConstant   = 0;
-
-            if (SetCommTimeouts(_handle, &tm) == 0)
-                throw new SetupFailException(port,
-                        format("can't SetCommTimeouts with error: %d", GetLastError()));
-        }
-
-        config = conf;
-    }
-}
-
-private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
-
-unittest
-{
-    alias Cfg = SerialPort.Config;
-
-    Cfg c;
-    c.set("2400:7e1.5");
-    assertNotThrown(c.set(c.mode));
-    assert(c.baudRate == 2400);
-    assert(c.dataBits == DataBits.data7);
-    assert(c.parity == Parity.even);
-    assert(c.stopBits == StopBits.onePointFive);
-    c.set("8N1");
-    assertNotThrown(c.set(c.mode));
-    assert(c.baudRate == 2400);
-    assert(c.dataBits == DataBits.data8);
-    assert(c.parity == Parity.none);
-    assert(c.stopBits == StopBits.one);
-    c.set("320:5o2");
-    assertNotThrown(c.set(c.mode));
-    assert(c.baudRate == 320);
-    assert(c.dataBits == DataBits.data5);
-    assert(c.parity == Parity.odd);
-    assert(c.stopBits == StopBits.two);
-
-    assertThrown!SerialPortException(c.set("4o2"));
-    assertThrown!SerialPortException(c.set("5x2"));
-    assertThrown!SerialPortException(c.set("8e3"));
-    assertNotThrown!SerialPortException(c.set(":8N1"));
-    assertNotThrown(c.set(c.mode));
 }
