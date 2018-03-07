@@ -1,5 +1,7 @@
 ### SerialPort
 
+[Docs](http://serialport.dpldocs.info/serialport.html)
+
 Library provides simple **non-blocking** work with serial port for Posix and Windows.
 
 Simple usage:
