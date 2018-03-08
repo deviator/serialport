@@ -1,0 +1,4 @@
+name "realtest"
+targetType "executable"
+targetName "serialport-test-app"
+dependency "serialport" path="../.."
