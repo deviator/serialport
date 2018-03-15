@@ -343,16 +343,16 @@ public:
 
                 ret.baudRate = cast(uint)cfg.BaudRate;
 
-                static immutable pAA = [NOPARITY: Parity.none,
-                                        ODDPARITY: Parity.odd,
-                                        EVENPARITY: Parity.even];
+                enum pAA = [NOPARITY: Parity.none,
+                            ODDPARITY: Parity.odd,
+                            EVENPARITY: Parity.even];
 
                 ret.parity = pAA[cfg.Parity];
 
-                static immutable dbAA = [5: DataBits.data5,
-                                         6: DataBits.data6,
-                                         7: DataBits.data7,
-                                         8: DataBits.data8];
+                enum dbAA = [5: DataBits.data5,
+                             6: DataBits.data6,
+                             7: DataBits.data7,
+                             8: DataBits.data8];
 
                 ret.dataBits = dbAA.get(cfg.ByteSize, DataBits.data8);
 
