@@ -1,3 +1,5 @@
+// Posix only
+// need socat in system
 name "realtest"
 targetType "executable"
 targetName "serialport-test-app"

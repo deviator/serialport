@@ -16,10 +16,17 @@ auto runSocat(uint bufferSize=1024)
         ProcessPipes pipe;
         string port1, port2;
 
+        string[2] ports() const @property
+        { return [port1, port2]; }
+
         this(int bufsz)
         {
             enforce(getuid() == 0, "you must be a root");
-            pipe = pipeShell("socat -d -d -b%d pty,raw,echo=0 pty,raw,echo=0".format(bufsz));
+            auto cmd = ("socat -d -d -b%d pty,raw,"~
+                   "echo=0 pty,raw,echo=0").format(bufsz);
+            import std.stdio;
+            writeln(cmd);
+            pipe = pipeShell(cmd);
             
             port1 = parsePort(pipe.stderr.readln.strip);
             port2 = parsePort(pipe.stderr.readln.strip);
