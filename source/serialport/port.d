@@ -666,7 +666,7 @@ protected:
     }
 
     /// open handler, set new config
-    final void setup(Config conf)
+    void setup(Config conf)
     {
         enforce(port.length, new SFE(port, "zero length name"));
 
