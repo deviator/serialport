@@ -10,7 +10,7 @@ Simple usage:
 auto com = new SerialPort("/dev/ttyUSB0", 19200);
 
 // setting parameters example
-com.config = SerialPort.Config(9600, Parity.none, DataBits.data8, StopBits.one)
+com.config = SerialPort.Config(9600, DataBits.data8, Parity.none, StopBits.one)
 com.set(19200).set(DataBits.data8);
 com.stopBits = StopBits.two;
 // set 9600 baudrate, 8 data bits, no parity and one stop bit
