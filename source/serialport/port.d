@@ -277,7 +277,7 @@ public:
     string name() const @property { return port; }
 
     ///
-    SPHandle handle() const @property { return _handle; }
+    inout(SPHandle) handle() inout @property { return _handle; }
 
     ///
     void reopen(string port, Config cfg)
@@ -581,7 +581,8 @@ public:
         version (Posix)
         {
             res = posixWrite(_handle, ptr, len);
-            enforce(res >= 0, new WriteException(port, text("errno ", errno)));
+            if (res < 0 && errno == EAGAIN) res = 0;
+            else enforce(res >= 0, new WriteException(port, text("errno ", errno)));
         }
         version (Windows)
         {
@@ -838,7 +839,7 @@ public:
         See_Also: SerialPort.read
      +/
     void[] readLoop(void[] arr, Duration timeout=1.seconds,
-                                     Duration frameGap=50.msecs)
+                                Duration frameGap=50.msecs)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -855,7 +856,7 @@ public:
             enforce(readed <= arr.length,
                     new SerialPortException("read more what can"));
 
-            const res = read(arr[readed..$]).length;
+            const res = this.read(arr[readed..$]).length;
 
             readed += res;
 
@@ -875,7 +876,7 @@ public:
             if (readed == 0 && full.peek.to!Duration > timeout)
                 throw new TimeoutException(port);
 
-            sleep(pause);
+            this.sleep(pause);
         }
     }
 
@@ -895,7 +896,7 @@ public:
     void writeLoop(const(void[]) arr, Duration timeout=10.msecs)
     {
         if (closed) throw new PortClosedException(port);
-        size_t written = write(arr);
+        size_t written = this.write(arr);
         if (written == arr.length) return;
         auto pause = ioPause();
         const full = StopWatch(AutoStart.yes);
@@ -903,8 +904,8 @@ public:
         {
             if (full.peek.to!Duration > timeout)
                 throw new TimeoutException(port);
-            written += write(arr[written..$]);
-            if (written < arr.length) sleep(pause);
+            written += this.write(arr[written..$]);
+            if (written < arr.length) this.sleep(pause);
         }
     }
 }
