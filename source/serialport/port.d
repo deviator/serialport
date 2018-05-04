@@ -686,8 +686,21 @@ protected:
             opt.c_oflag &= ~OPOST;
             opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
             opt.c_cflag &= ~(CSIZE | PARENB);
-            if (conf.hardwareDisableFlowControl)
-                opt.c_cflag &= ~CRTSCTS;
+
+            // hardware flow control
+            version (OSX)
+            {
+                /+
+                The CCTS_OFLOW (CRTSCTS) flag is currently unused.
+                http://www.manpages.info/macosx/termios.4.html
+                 +/
+            }
+            else
+            {
+                if (conf.hardwareDisableFlowControl)
+                    opt.c_cflag &= ~CRTSCTS;
+            }
+
             opt.c_cflag |= CS8;
 
             enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
