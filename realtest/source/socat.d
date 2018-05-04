@@ -21,7 +21,7 @@ auto runSocat(uint bufferSize=1024)
 
         this(int bufsz)
         {
-            enforce(getuid() == 0, "you must be a root");
+            //enforce(getuid() == 0, "you must be a root");
             auto cmd = ("socat -d -d -b%d pty,raw,"~
                    "echo=0 pty,raw,echo=0").format(bufsz);
             import std.stdio;

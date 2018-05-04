@@ -20,7 +20,7 @@ d:
 #script: make -f .travis.mak DC=${DC}
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
-  - sudo dub run :realtest --compiler=${DC}
+  - dub run :realtest --compiler=${DC}
 matrix:
   exclude:
     - {os: osx, d: ldc-1.4.0}  
