@@ -50,7 +50,7 @@ string parseSocatPort(string ln)
 {
     // 
     auto ret = ln.split[$-1];
-    enforce(ret.startsWith("/dev/pts/"),
+    enforce(ret.startsWith("/dev/"),
     "unexpected last word in output line '%s'".format(ln));
     return ret;
 }
