@@ -39,7 +39,7 @@ class CFSlave : CF
     this(SerialPortBL com, size_t bufsize)
     { super(com, bufsize); }
 
-    override void run() { result = com.readLoop(data, 10.msecs, 1.msecs); }
+    override void run() { result = com.readLoop(data, 40.msecs, 10.msecs); }
 }
 
 void basicLoopTest(string[2] ports, size_t bufsize=1024*64)
