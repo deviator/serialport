@@ -127,7 +127,12 @@ package
 
 version (Posix)
 {
-    version (OSX) enum B57600 = 57600;
+    version (OSX)
+    {
+        enum B57600 = 57600;
+        enum B115200 = 115200;
+        enum B230400 = 230400;
+    }
 
     enum unixBaudList = [    0: B0,
                             50: B50, 
