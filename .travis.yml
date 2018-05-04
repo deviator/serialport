@@ -12,7 +12,6 @@ d:
   - ldc
   - ldc-beta
   - ldc-1.8.0
-  - ldc-1.4.0
   - dmd
   - dmd-nightly
   - dmd-2.079.1
@@ -21,8 +20,5 @@ d:
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
   - dub run :realtest --compiler=${DC} --build=unittest-cov
-matrix:
-  exclude:
-    - {os: osx, d: ldc-1.4.0}  
 after_success:
   - bash <(curl -s https://codecov.io/bash)
