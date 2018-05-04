@@ -2,6 +2,9 @@ module threadtest;
 
 import base;
 
+version (OSX) enum BUFFER_SIZE = 512;
+else enum BUFFER_SIZE = 1024;
+
 void threadTest(string[2] ports)
 {
     auto t = spawn(&thread, ports[1]);
@@ -12,7 +15,7 @@ void threadTest(string[2] ports)
         "one",
         "one two",
         "one two three",
-        "x".repeat(1024).join
+        "x".repeat(BUFFER_SIZE).join
     ];
 
     auto msg = "hello serialport";
@@ -65,7 +68,7 @@ void thread(string port)
         scope (exit) com.close();
 
         bool work = true;
-        void[1024] buffer = void;
+        void[BUFFER_SIZE] buffer = void;
 
         while (work)
         {
