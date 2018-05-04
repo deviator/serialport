@@ -654,7 +654,9 @@ protected:
                 termios opt;
                 enforce(tcgetattr(_handle, &opt) != -1,
                     new SFE(port, "can't get termios options"));
-                auto b = cfgetospeed(&opt);
+                version (OSX) alias true_speed_t = uint;
+                else alias true_speed_t = typeof(cfgetospeed(&opt));
+                auto b = cast(true_speed_t)cfgetospeed(&opt);
                 if (b !in unixUintBaudList)
                 {
                     warningf("unknown baud speed setted: %s", b);
@@ -735,6 +737,16 @@ protected:
 
         config = conf;
     }
+}
+
+version (unittest) alias SPConfig = SerialPort.Config;
+
+unittest
+{
+    SPConfig a, b;
+    a.set("2400:7e2");
+    b.set(a.mode);
+    assert(a == b);
 }
 
 private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
