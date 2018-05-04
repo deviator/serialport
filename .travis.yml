@@ -1,12 +1,19 @@
 dist: trusty
 sudo: required
+
+os:
+  - linux
+  - osx
+
 addons:
   apt:
     packages:
       - socat
-os:
-  - linux
-  - osx
+
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update       ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install socat; fi
+
 language: d
 d:
   - ldc
@@ -16,9 +23,10 @@ d:
   - dmd-nightly
   - dmd-2.079.1
   - dmd-2.078.3
-#script: make -f .travis.mak DC=${DC}
+
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
   - dub run :realtest --compiler=${DC} --build=unittest-cov
+
 after_success:
   - bash <(curl -s https://codecov.io/bash)
