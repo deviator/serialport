@@ -26,7 +26,6 @@ d:
 
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
-  - dub run :realtest --compiler=${DC}
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)

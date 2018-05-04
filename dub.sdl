@@ -4,5 +4,3 @@ description "Simple crossplatform work with serailport"
 authors "Oleg Butko (deviator)"
 copyright "Copyright © 2017"
 license "MIT"
-
-subPackage "realtest"
