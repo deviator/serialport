@@ -328,6 +328,7 @@ void fiberTest(string[2] ports)
         Thread.sleep(250.nsecs);
         if (slave.result.length == master.data.length)
         {
+            import std.algorithm : equal;
             enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
             work = false;
             writeln("basic loop steps: ", step);
