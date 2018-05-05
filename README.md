@@ -1,6 +1,7 @@
 ### SerialPort
 
 [![Build Status](https://travis-ci.org/deviator/serialport.svg?branch=master)](https://travis-ci.org/deviator/serialport)
+[![Build status](https://ci.appveyor.com/api/projects/status/64m852qc8j3re1y1?svg=true)](https://ci.appveyor.com/project/deviator/serialport)
 [![codecov](https://codecov.io/gh/deviator/serialport/branch/master/graph/badge.svg)](https://codecov.io/gh/deviator/serialport)
 [![Dub](https://img.shields.io/dub/v/serialport.svg)](http://code.dlang.org/packages/serialport)
 [![Downloads](https://img.shields.io/dub/dt/serialport.svg)](http://code.dlang.org/packages/serialport)
