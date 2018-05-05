@@ -33,7 +33,11 @@ branches:
     - master
 
 before_build:
+  - bcdedit.exe -set loadoptions DDISABLE_INTEGRITY_CHECKS
   - bcdedit.exe -set TESTSIGNING ON
+  - sleep 5
+  - restart-computer -f
+  - sleep 5
   - choco install com0com
   - cd "C:\Program Files (x86)\com0com\"
   - .\setupc.exe --silent install PortName=COM33 PortName=COM34
