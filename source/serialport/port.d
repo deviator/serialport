@@ -3,7 +3,7 @@ module serialport.port;
 
 import std.algorithm;
 import std.array;
-import std.conv : to, text, octal;
+import std.conv : to, text;
 import std.exception;
 import std.experimental.logger;
 import std.path;
@@ -12,10 +12,8 @@ import core.time;
 import std.datetime.stopwatch;
 
 import serialport.types;
+import serialport.config;
 import serialport.exception;
-
-version (Posix) {} else version (Windows) {}
-else static assert(0, "unsupported platform");
 
 ///
 class SerialPort
@@ -29,181 +27,7 @@ protected:
 public:
 
     ///
-    static immutable string modeSplitChar=":";
-
-    ///
-    static struct Config
-    {
-        ///
-        uint baudRate=9600;
-        ///
-        DataBits dataBits=DataBits.data8;
-        ///
-        Parity parity=Parity.none;
-        ///
-        StopBits stopBits=StopBits.one;
-
-        ///
-        bool hardwareDisableFlowControl = true;
-
-        /++ Set parity value
-            Returns: this
-         +/
-        auto set(Parity v) { parity = v; return this; }
-
-        /++ Set baudrate value
-            Returns: this
-         +/
-        auto set(uint v) { baudRate = v; return this; }
-
-        /++ Set data bits value
-            Returns: this
-         +/
-        auto set(DataBits v) { dataBits = v; return this; }
-
-        /++ Set stop bits value
-            Returns: this
-         +/
-        auto set(StopBits v) { stopBits = v; return this; }
-
-        /++
-            Use mode string for setting baudrate, data bits, parity and stop bits.
-
-            Format: "B:DPS"
-            where:
-                B is baud rate
-                D is data bits (5, 6, 7, 8)
-                P is parity ('N' or 'n' -- none,
-                             'E' or 'e' -- even,
-                             'O' or 'o' -- odd)
-                S is stop bits ('1', '1.5', '2')
-
-            You can skip baudrate.
-
-            example mode strings: "9600:8N1" ":8n1" "7o1.5" "2400:6e2"
-
-            Throws:
-                ParseModeException if mode string is badly formatted or using bad values
-         +/
-        auto set(string mode)
-        {
-            alias PME = ParseModeException;
-
-            auto errstr = "error mode '%s'".format(mode);
-            enforce(mode.length >= 3, new PME(errstr ~ ": too short"));
-
-            auto vals = mode.split(modeSplitChar);
-
-            if (vals.length == 0) return this;
-
-            if (vals.length > 2)
-                throw new PME(errstr ~ ": many parts");
-
-            if (vals.length == 2)
-            {
-                if (vals[0].length)
-                {
-                    try baudRate = vals[0].to!uint;
-                    catch (Exception e)
-                        throw new PME(errstr ~
-                                ": baud rate parse error: " ~ e.msg);
-                }
-                mode = vals[1];
-            }
-            else mode = vals[0];
-
-            auto db = cast(int)mode[0] - cast(int)'0';
-            if (db >= 5 && db <= 8) dataBits = cast(DataBits)db;
-            else throw new PME(errstr ~ ": unsupported data bits '" ~ mode[0] ~ "'");
-
-            auto p = mode[1..2].toLower;
-            if (p == "n" || p == "o" || p == "e")
-            {
-                parity = ["n": Parity.none,
-                          "o": Parity.odd,
-                          "e": Parity.even][p];
-            }
-            else throw new PME(errstr ~ ": unsupported parity '" ~ p ~ "'");
-
-            auto sb = mode[2..$];
-            if (sb == "1" || sb == "1.5" || sb == "2")
-            {
-                stopBits = ["1": StopBits.one,
-                            "1.5": StopBits.onePointFive,
-                            "2": StopBits.two][sb];
-            }
-            else throw new PME(errstr ~ ": unsupported stop bits '" ~ sb ~ "'");
-
-            return this;
-        }
-
-        ///
-        unittest
-        {
-            Config c;
-            c.set("2400:7e1.5");
-            assertNotThrown(c.set(c.mode));
-            assert(c.baudRate == 2400);
-            assert(c.dataBits == DataBits.data7);
-            assert(c.parity == Parity.even);
-            assert(c.stopBits == StopBits.onePointFive);
-            c.set("8N1");
-            assertNotThrown(c.set(c.mode));
-            assert(c.baudRate == 2400);
-            assert(c.dataBits == DataBits.data8);
-            assert(c.parity == Parity.none);
-            assert(c.stopBits == StopBits.one);
-            c.set("320:5o2");
-            assertNotThrown(c.set(c.mode));
-            assert(c.baudRate == 320);
-            assert(c.dataBits == DataBits.data5);
-            assert(c.parity == Parity.odd);
-            assert(c.stopBits == StopBits.two);
-
-            alias PME = ParseModeException;
-            assertThrown!PME(c.set("4o2"));
-            assertThrown!PME(c.set("5x2"));
-            assertThrown!PME(c.set("8e3"));
-            assertNotThrown!PME(c.set(":8N1"));
-            assertNotThrown(c.set(c.mode));
-        }
-
-        /++ Construct config, parse mode to it and return.
-
-            Returns: new config
-
-            See_Also: set(string mode)
-         +/
-        static Config parse(string mode)
-        {
-            Config ret;
-            ret.set(mode);
-            return ret;
-        }
-
-        /++ Build mode string.
-
-            Can be used for parsing.
-
-            Returns: mode string
-
-            See_Also: parse, set(string mode)
-         +/
-        string mode() const @property
-        {
-            return "%s:%s%s%s".format(
-                baudRate,
-                dataBits.to!int,
-                [Parity.none: "n",
-                 Parity.odd:  "o",
-                 Parity.even: "e"][parity],
-                [StopBits.one: "1",
-                 StopBits.onePointFive: "1.5",
-                 StopBits.two: "2"
-                ][stopBits]
-            );
-        }
-    }
+    alias Config = SPConfig;
 
     /++ Construct SerialPort using extend mode string.
 
@@ -224,9 +48,7 @@ public:
     this(string exmode)
     {
         auto s = exmode.split(modeSplitChar);
-
         if (s.length == 0) throw new ParseModeException("empty mode");
-
         this(s[0], s.length > 1 ? Config.parse(s[1..$].join(modeSplitChar)) : Config.init);
     }
 
@@ -291,178 +113,179 @@ public:
     override string toString() { return port ~ ":" ~ config.mode; }
 
     ///
-    SerialPort set(Parity p) { config = config.set(p); return this; }
+    SerialPort set(T)(T val)
+        if (is(typeof(Config.init.set(val))))
+    {
+        Config tmp = config;
+        tmp.set(val);
+        config = tmp;
+        return this;
+    }
+
     ///
-    SerialPort set(uint br) { config = config.set(br); return this; }
-    ///
-    SerialPort set(DataBits db) { config = config.set(db); return this; }
-    ///
-    SerialPort set(StopBits sb) { config = config.set(sb); return this; }
-    ///
-    SerialPort set(string mode) { config = config.set(mode); return this; }
+    bool closed() const @property
+    {
+        version (Posix) return _handle == initHandle;
+        version (Windows) return _handle is initHandle;
+    }
+
+    /// Get config
+    // const for disallow `com.config.set(value)`
+    const(Config) config() @property
+    {
+        enforce(!closed, new PortClosedException(port));
+
+        Config ret;
+
+        version (Posix)
+        {
+            termios opt;
+            enforce(tcgetattr(_handle, &opt) != -1,
+                    new SerialPortException(format("Failed while call tcgetattr: %d", errno)));
+
+            ret.baudRate = getUintBaudRate();
+
+            if (opt.c_cflag.hasFlag(PARODD)) ret.parity = Parity.odd;
+            else if (!(opt.c_cflag & PARENB)) ret.parity = Parity.none;
+            else ret.parity = Parity.even;
+
+                    if (opt.c_cflag.hasFlag(CS8)) ret.dataBits = DataBits.data8;
+            else if (opt.c_cflag.hasFlag(CS7)) ret.dataBits = DataBits.data7;
+            else if (opt.c_cflag.hasFlag(CS6)) ret.dataBits = DataBits.data6;
+            else ret.dataBits = DataBits.data5;
+
+            ret.stopBits = opt.c_cflag.hasFlag(CSTOPB) ? StopBits.two : StopBits.one;
+        }
+        version (Windows)
+        {
+            DCB cfg;
+            GetCommState(_handle, &cfg);
+
+            ret.baudRate = cast(uint)cfg.BaudRate;
+
+            enum pAA = [NOPARITY: Parity.none,
+                        ODDPARITY: Parity.odd,
+                        EVENPARITY: Parity.even];
+
+            ret.parity = pAA[cfg.Parity];
+
+            enum dbAA = [5: DataBits.data5,
+                         6: DataBits.data6,
+                         7: DataBits.data7,
+                         8: DataBits.data8];
+
+            ret.dataBits = dbAA.get(cfg.ByteSize, DataBits.data8);
+
+            ret.stopBits = cfg.StopBits == ONESTOPBIT ? StopBits.one : StopBits.two;
+        }
+
+        return ret;
+    }
+
+    /// Set config
+    void config(Config c) @property
+    {
+        alias UE = UnsupportedException;
+        enforce(!closed, new PortClosedException(port));
+
+        version (Posix)
+        {
+            setUintBaudRate(c.baudRate);
+
+            termios opt;
+            enforce(tcgetattr(_handle, &opt) != -1,
+                    new SerialPortException(format("Failed while call tcgetattr: %d", errno)));
+
+            final switch (c.parity)
+            {
+                case Parity.none:
+                    opt.c_cflag &= ~PARENB;
+                    break;
+                case Parity.odd:
+                    opt.c_cflag |= (PARENB | PARODD);
+                    break;
+                case Parity.even:
+                    opt.c_cflag &= ~PARODD;
+                    opt.c_cflag |= PARENB;
+                    break;
+            }
+
+            final switch (c.stopBits)
+            {
+                case StopBits.one:
+                    opt.c_cflag &= ~CSTOPB;
+                    break;
+                case StopBits.onePointFive:
+                case StopBits.two:
+                    opt.c_cflag |= CSTOPB;
+                    break;
+            }
+
+            opt.c_cflag &= ~CSIZE;
+            switch (c.dataBits) {
+                case DataBits.data5: opt.c_cflag |= CS5; break;
+                case DataBits.data6: opt.c_cflag |= CS6; break;
+                case DataBits.data7: opt.c_cflag |= CS7; break;
+                case DataBits.data8: opt.c_cflag |= CS8; break;
+                default:
+                    errorf("config dataBits is setted as %d, set default CS8", c.dataBits);
+                    opt.c_cflag |= CS8;
+                    break;
+            }
+
+            enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
+                    new SerialPortException(format("Failed while call tcsetattr: %d", errno)));
+
+            auto test = config;
+            enforce(test.baudRate == c.baudRate, new UE(c.baudRate));
+            enforce(test.parity   == c.parity,   new UE(c.parity));
+            enforce(test.stopBits == c.stopBits, new UE(c.stopBits));
+            enforce(test.dataBits == c.dataBits, new UE(c.dataBits));
+        }
+        version (Windows)
+        {
+            DCB cfg;
+            GetCommState(_handle, &cfg);
+
+            if (cfg.BaudRate != cast(DWORD)c.baudRate)
+            {
+                cfg.BaudRate = cast(DWORD)c.baudRate;
+                enforce(SetCommState(_handle, &cfg),
+                        new UE(c.baudRate));
+            }
+
+            const tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
+                               Parity.even: EVENPARITY][c.parity];
+
+            if (cfg.Parity != tmpParity)
+            {
+                cfg.Parity = cast(ubyte)tmpParity;
+                enforce(SetCommState(_handle, &cfg),
+                        new UE(c.parity));
+            }
+
+            const tmpStopBits = [StopBits.one: ONESTOPBIT,
+                                 StopBits.onePointFive: ONESTOPBIT,
+                                 StopBits.two: TWOSTOPBITS][c.stopBits];
+
+            if (cfg.StopBits != tmpStopBits)
+            {
+                cfg.StopBits = cast(ubyte)tmpStopBits;
+                enforce(SetCommState(_handle, &cfg),
+                        new UE(c.stopBits));
+            }
+
+            if (cfg.ByteSize != cast(typeof(cfg.ByteSize))c.dataBits)
+            {
+                cfg.ByteSize = cast(typeof(cfg.ByteSize))c.dataBits;
+                enforce(SetCommState(_handle, &cfg),
+                        new UE(c.dataBits));
+            }
+        }
+    }
 
     @property
     {
-        ///
-        bool closed() const
-        {
-            version (Posix) return _handle == initHandle;
-            version (Windows) return _handle is initHandle;
-        }
-
-        /// Get config
-        Config config()
-        {
-            enforce(!closed, new PortClosedException(port));
-
-            Config ret;
-
-            version (Posix)
-            {
-                termios opt;
-                enforce(tcgetattr(_handle, &opt) != -1,
-                        new SerialPortException(format("Failed while call tcgetattr: %d", errno)));
-
-                ret.baudRate = getUintBaudRate();
-
-                if (opt.c_cflag.hasFlag(PARODD)) ret.parity = Parity.odd;
-                else if (!(opt.c_cflag & PARENB)) ret.parity = Parity.none;
-                else ret.parity = Parity.even;
-
-                     if (opt.c_cflag.hasFlag(CS8)) ret.dataBits = DataBits.data8;
-                else if (opt.c_cflag.hasFlag(CS7)) ret.dataBits = DataBits.data7;
-                else if (opt.c_cflag.hasFlag(CS6)) ret.dataBits = DataBits.data6;
-                else ret.dataBits = DataBits.data5;
-
-                ret.stopBits = opt.c_cflag.hasFlag(CSTOPB) ? StopBits.two : StopBits.one;
-            }
-            version (Windows)
-            {
-                DCB cfg;
-                GetCommState(_handle, &cfg);
-
-                ret.baudRate = cast(uint)cfg.BaudRate;
-
-                enum pAA = [NOPARITY: Parity.none,
-                            ODDPARITY: Parity.odd,
-                            EVENPARITY: Parity.even];
-
-                ret.parity = pAA[cfg.Parity];
-
-                enum dbAA = [5: DataBits.data5,
-                             6: DataBits.data6,
-                             7: DataBits.data7,
-                             8: DataBits.data8];
-
-                ret.dataBits = dbAA.get(cfg.ByteSize, DataBits.data8);
-
-                ret.stopBits = cfg.StopBits == ONESTOPBIT ? StopBits.one : StopBits.two;
-            }
-
-            return ret;
-        }
-
-        /// Set config
-        void config(Config c)
-        {
-            alias UE = UnsupportedException;
-            if (closed) throw new PortClosedException(port);
-
-            version (Posix)
-            {
-                setUintBaudRate(c.baudRate);
-
-                termios opt;
-                enforce(tcgetattr(_handle, &opt) != -1,
-                        new SerialPortException(format("Failed while call tcgetattr: %d", errno)));
-
-                final switch (c.parity)
-                {
-                    case Parity.none:
-                        opt.c_cflag &= ~PARENB;
-                        break;
-                    case Parity.odd:
-                        opt.c_cflag |= (PARENB | PARODD);
-                        break;
-                    case Parity.even:
-                        opt.c_cflag &= ~PARODD;
-                        opt.c_cflag |= PARENB;
-                        break;
-                }
-
-                final switch (c.stopBits)
-                {
-                    case StopBits.one:
-                        opt.c_cflag &= ~CSTOPB;
-                        break;
-                    case StopBits.onePointFive:
-                    case StopBits.two:
-                        opt.c_cflag |= CSTOPB;
-                        break;
-                }
-
-                opt.c_cflag &= ~CSIZE;
-                switch (c.dataBits) {
-                    case DataBits.data5: opt.c_cflag |= CS5; break;
-                    case DataBits.data6: opt.c_cflag |= CS6; break;
-                    case DataBits.data7: opt.c_cflag |= CS7; break;
-                    case DataBits.data8: opt.c_cflag |= CS8; break;
-                    default:
-                        errorf("config dataBits is setted as %d, set default CS8", c.dataBits);
-                        opt.c_cflag |= CS8;
-                        break;
-                }
-
-                enforce(tcsetattr(_handle, TCSANOW, &opt) != -1,
-                        new SerialPortException(format("Failed while call tcsetattr: %d", errno)));
-
-                auto test = config;
-                enforce(test.baudRate == c.baudRate, new UE(c.baudRate));
-                enforce(test.parity   == c.parity,   new UE(c.parity));
-                enforce(test.stopBits == c.stopBits, new UE(c.stopBits));
-                enforce(test.dataBits == c.dataBits, new UE(c.dataBits));
-            }
-            version (Windows)
-            {
-                DCB cfg;
-                GetCommState(_handle, &cfg);
-
-                if (cfg.BaudRate != cast(DWORD)c.baudRate)
-                {
-                    cfg.BaudRate = cast(DWORD)c.baudRate;
-                    enforce(SetCommState(_handle, &cfg),
-                            new UE(c.baudRate));
-                }
-
-                const tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
-                                   Parity.even: EVENPARITY][c.parity];
-                if (cfg.Parity != tmpParity)
-                {
-                    cfg.Parity = cast(ubyte)tmpParity;
-                    enforce(SetCommState(_handle, &cfg),
-                            new UE(c.parity));
-                }
-
-                const tmpStopBits = [StopBits.one: ONESTOPBIT,
-                                     StopBits.onePointFive: ONESTOPBIT,
-                                     StopBits.two: TWOSTOPBITS][c.stopBits];
-
-                if (cfg.StopBits != tmpStopBits)
-                {
-                    cfg.StopBits = cast(ubyte)tmpStopBits;
-                    enforce(SetCommState(_handle, &cfg),
-                            new UE(c.stopBits));
-                }
-
-                if (cfg.ByteSize != cast(typeof(cfg.ByteSize))c.dataBits)
-                {
-                    cfg.ByteSize = cast(typeof(cfg.ByteSize))c.dataBits;
-                    enforce(SetCommState(_handle, &cfg),
-                            new UE(c.dataBits));
-                }
-            }
-        }
-
         ///
         Parity parity() { return config.parity; }
         ///
@@ -473,43 +296,43 @@ public:
         StopBits stopBits() { return config.stopBits; }
 
         ///
-        Parity parity(Parity v) { config = config.set(v); return v; }
+        Parity parity(Parity v) { set(v); return v; }
         ///
-        uint baudRate(uint v) { config = config.set(v); return v; }
+        uint baudRate(uint v) { set(v); return v; }
         ///
-        DataBits dataBits(DataBits v) { config = config.set(v); return v; }
+        DataBits dataBits(DataBits v) { set(v); return v; }
         ///
-        StopBits stopBits(StopBits v) { config = config.set(v); return v; }
+        StopBits stopBits(StopBits v) { set(v); return v; }
+    }
 
-        /++ List available serial ports in system
-         +/
-        static string[] listAvailable() @property
+    /++ List available serial ports in system
+        +/
+    static string[] listAvailable() @property
+    {
+        version (Posix)
         {
-            version (Posix)
-            {
-                import std.file : exists;
-                return dirEntries("/sys/class/tty", SpanMode.shallow)
-                        .map!(a=>"/dev/"~a.name.baseName)
-                        .filter!(a=>a.exists)
-                        .array.sort.array
-                       ~
-                       dirEntries("/dev/pts", SpanMode.shallow)
-                        .map!(a=>a.name).array.sort.array;
-            }
-            version (Windows)
-            {
-                import std.windows.registry : Registry;
-                string[] arr;
-                try foreach (v; Registry
-                                .localMachine()
-                                .getKey("HARDWARE")
-                                .getKey("DEVICEMAP")
-                                .getKey("SERIALCOMM")
-                                .values)
-                    arr ~= v.value_SZ;
-                catch (Throwable e) .error(e.msg);
-                return arr;
-            }
+            import std.file : exists;
+            return dirEntries("/sys/class/tty", SpanMode.shallow)
+                    .map!(a=>"/dev/"~a.name.baseName)
+                    .filter!(a=>a.exists)
+                    .array.sort.array
+                    ~
+                    dirEntries("/dev/pts", SpanMode.shallow)
+                    .map!(a=>a.name).array.sort.array;
+        }
+        version (Windows)
+        {
+            import std.windows.registry : Registry;
+            string[] arr;
+            try foreach (v; Registry
+                            .localMachine()
+                            .getKey("HARDWARE")
+                            .getKey("DEVICEMAP")
+                            .getKey("SERIALCOMM")
+                            .values)
+                arr ~= v.value_SZ;
+            catch (Throwable e) .error(e.msg);
+            return arr;
         }
     }
 
@@ -550,7 +373,7 @@ public:
             if (!rfr)
             {
                 auto err = GetLastError();
-                if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
+                if (err == ERROR_IO_PENDING) { /+ buffer empty +/ }
                 else throw new ReadException(port, text("error ", err));
             }
             res = sres;
@@ -581,7 +404,7 @@ public:
         version (Posix)
         {
             res = posixWrite(_handle, ptr, len);
-            if (res < 0 && errno == EAGAIN) res = 0;
+            if (res < 0 && errno == EAGAIN) res = 0; // buffer filled
             else enforce(res >= 0, new WriteException(port, text("errno ", errno)));
         }
         version (Windows)
@@ -591,7 +414,7 @@ public:
             if (!wfr)
             {
                 auto err = GetLastError();
-                if (err == ERROR_IO_PENDING) { /+ asynchronously +/ }
+                if (err == ERROR_IO_PENDING) { /+ buffer filled +/ }
                 else throw new WriteException(port, text("error ", err));
             }
             res = sres;
@@ -610,6 +433,7 @@ protected:
         {
             version (usetermios2)
             {
+                import std.conv : octal;
                 enum CBAUD  = octal!10017;
                 enum BOTHER = octal!10000;
 
@@ -739,16 +563,6 @@ protected:
     }
 }
 
-version (unittest) alias SPConfig = SerialPort.Config;
-
-unittest
-{
-    SPConfig a, b;
-    a.set("2400:7e2");
-    b.set(a.mode);
-    assert(a == b);
-}
-
 private bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
 
 /// Serial port with basic loops
@@ -785,7 +599,7 @@ protected:
     {
         // approx theoretical time for receive or send
         // one byte (8 bit + 1 start bit + 1 stop bit)
-        return (cast(ulong)(10.0f / baudRate * 1e6)).usecs;
+        return (cast(ulong)(10.0f / config.baudRate * 1e6)).usecs;
     }
 
 public:

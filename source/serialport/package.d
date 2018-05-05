@@ -5,11 +5,18 @@
  +/
 module serialport;
 
-public import serialport.exception;
-public import serialport.port;
-public import serialport.types;
+version (Posix) {} else version (Windows) {}
+else static assert(0, "unsupported platform");
 
-version (unittest):
+public
+{
+    import serialport.exception;
+    import serialport.port;
+    import serialport.types;
+    import serialport.config;
+}
+
+version (unittest): private:
 
 import std.range;
 import std.concurrency;
@@ -80,6 +87,8 @@ ComPipe getPlatformComPipe(int bufsz)
     else
     {
         pragma(msg, "platform doesn't support, no real test");
+        import std.stdio;
+        stderr.writeln(SerialPort.listAvailable);
         return null;
     }
 }
@@ -122,13 +131,21 @@ auto utCall(alias fnc, Args...)(Args args)
 
 void threadTest(string[2] ports)
 {
+    assert(SerialPort.listAvailable.length != 0);
+
     static struct End {}
     static End end() @property { return End.init; }
 
     static void echoThread(string port)
     {
-        auto com = new SerialPort(port);
+        auto com = new SerialPort(port, "2400:8N1");
         scope (exit) com.close();
+
+        com.set(1200);
+        assert(com.config.baudRate == 1200);
+
+        com.baudRate = 19200;
+        assert(com.config.baudRate == 19200);
 
         bool work = true;
         void[BUFFER_SIZE] buffer = void;
@@ -159,7 +176,18 @@ void threadTest(string[2] ports)
 
     auto t = spawn(&echoThread, ports[1]);
 
-    auto com = new SerialPort(ports[0]);
+    auto com = new SerialPort(ports[0], 19200);
+
+    assert(com.baudRate == 19200);
+    assert(com.dataBits == DataBits.data8);
+    assert(com.parity == Parity.none);
+    assert(com.stopBits == StopBits.one);
+
+    assert(com.config.baudRate == 19200);
+    assert(com.config.dataBits == DataBits.data8);
+    assert(com.config.parity == Parity.none);
+    assert(com.config.stopBits == StopBits.one);
+
     scope (exit) com.close();
 
     enum origList = [

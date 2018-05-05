@@ -125,6 +125,9 @@ package
     }
 }
 
+///
+static immutable string modeSplitChar=":";
+
 version (Posix)
 {
     version (OSX)
