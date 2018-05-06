@@ -315,7 +315,8 @@ public:
         }
         version (OSX)
         {
-            return dirEntries("/dev/", "{tty,cu}*", SpanMode.shallow).array;
+            return dirEntries("/dev/", "{tty,cu}*", SpanMode.shallow)
+                    .map!(a=>a.name).array;
         }
         version (Windows)
         {
