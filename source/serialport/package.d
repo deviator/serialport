@@ -126,6 +126,12 @@ unittest
 
     reopen();
     utCall!fiberTest("fiber test", cp.ports);
+
+    reopen();
+    utCall!fiberTest2("fiber test 2", cp.ports);
+
+    reopen();
+    utCall!readTimeoutTest("read timeout test", cp.ports);
 }
 
 auto utCall(alias fnc, Args...)(string fname, Args args)
@@ -271,48 +277,54 @@ void threadTest(SPT)(string[2] ports)
     +/
 }
 
+class CF : Fiber
+{
+    void[] data;
+
+    SerialPortFR com;
+
+    this(SerialPortFR com, size_t bufsize)
+    {
+        this.com = com;
+        this.data = new void[bufsize];
+        super(&run);
+    }
+
+    abstract void run();
+}
+
+class CFSlave : CF
+{
+    void[] result;
+
+    Duration readTimeout = 40.msecs;
+    Duration readGapTimeout = 10.msecs;
+
+    this(SerialPortFR com, size_t bufsize)
+    { super(com, bufsize); }
+
+    override void run()
+    { result = com.readLoop(data, readTimeout, readGapTimeout); }
+}
+
+class CFMaster : CF
+{
+    CFSlave slave;
+
+    Duration writeTimeout = 20.msecs;
+
+    this(SerialPortFR com, size_t bufsize)
+    {
+        super(com, bufsize);
+        foreach (ref v; cast(ubyte[])data)
+            v = uniform(ubyte(0), ubyte(128));
+    }
+
+    override void run() { com.writeLoop(data, writeTimeout); }
+}
+
 void fiberTest(string[2] ports)
 {
-    static class CF : Fiber
-    {
-        void[] data;
-
-        SerialPortFR com;
-
-        this(SerialPortFR com, size_t bufsize)
-        {
-            this.com = com;
-            this.data = new void[bufsize];
-            super(&run);
-        }
-
-        abstract void run();
-    }
-
-    static class CFSlave : CF
-    {
-        void[] result;
-
-        this(SerialPortFR com, size_t bufsize)
-        { super(com, bufsize); }
-
-        override void run() { result = com.readLoop(data, 40.msecs, 10.msecs); }
-    }
-
-    static class CFMaster : CF
-    {
-        CFSlave slave;
-
-        this(SerialPortFR com, size_t bufsize)
-        {
-            super(com, bufsize);
-            foreach (ref v; cast(ubyte[])data)
-                v = uniform(ubyte(0), ubyte(128));
-        }
-
-        override void run() { com.writeLoop(data, 20.msecs); }
-    }
-
     auto slave = new CFSlave(new SerialPortFR(ports[0]), BUFFER_SIZE);
     auto master = new CFMaster(new SerialPortFR(ports[1]), BUFFER_SIZE);
 
@@ -333,4 +345,66 @@ void fiberTest(string[2] ports)
             writeln("basic loop steps: ", step);
         }
     }
+}
+
+void fiberTest2(string[2] ports)
+{
+    string mode = "19200:8N1";
+
+    auto scom = new SerialPortFR(ports[0], 9600, "8N1");
+    auto mcom = new SerialPortFR(ports[1], "19200:8N1");
+
+    version (Posix)
+        assertThrown!UnsupportedException(scom.baudRate = 9200);
+
+    scom.reopen(ports[0], SPConfig.parse(mode));
+
+    auto slave  = new CFSlave(scom,  BUFFER_SIZE * 1024);
+    auto master = new CFMaster(mcom, BUFFER_SIZE * 1024);
+
+    master.writeTimeout = 200.msecs;
+    void run()
+    {
+        bool work = true;
+        int step;
+        while (work)
+        {
+            if (master.state != Fiber.State.TERM) master.call;
+            if (slave.state != Fiber.State.TERM) slave.call;
+
+            step++;
+            Thread.sleep(250.nsecs);
+            if (slave.result.length == master.data.length)
+            {
+                import std.algorithm : equal;
+                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
+                work = false;
+                writeln("basic loop steps: ", step);
+            }
+        }
+    }
+
+    run();
+
+    scom.reopen(scom.name, scom.config);
+    mcom.reopen(mcom.name, mcom.config);
+
+    master.writeTimeout = 10.msecs;
+    master.reset();
+    slave.reset();
+    slave.result = [];
+    assertThrown!TimeoutException(run());
+}
+
+void readTimeoutTest(string[2] ports)
+{
+    string mode = "19200:8N1";
+
+    auto comA = new SerialPortFR(ports[0], 19200);
+    void[1024] buffer = void;
+    assertThrown!TimeoutException(comA.readLoop(buffer[], 1.msecs, 1.msecs));
+
+    auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
+    comB.readTimeout = 1.msecs;
+    assertThrown!TimeoutException(comB.read(buffer[]));
 }
