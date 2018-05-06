@@ -31,7 +31,12 @@ import std.random;
 import std.process;
 import core.thread;
 
-enum BUFFER_SIZE = 1024;
+version (linux)
+    enum BUFFER_SIZE = 1024;
+version (OSX)
+    enum BUFFER_SIZE = 256;
+version (Windows)
+    enum BUFFER_SIZE = 1024;
 
 interface ComPipe
 {
