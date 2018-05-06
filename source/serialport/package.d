@@ -364,10 +364,19 @@ void fiberTest2(string[2] ports)
 
     scom.reopen(ports[0], SPConfig.parse(mode));
 
-    auto slave  = new CFSlave(scom,  BUFFER_SIZE * 1024);
-    auto master = new CFMaster(mcom, BUFFER_SIZE * 1024);
+    version (OSX)
+        enum BK = 32;
+    else
+        enum BK = 1024;
 
-    master.writeTimeout = 200.msecs;
+    auto slave  = new CFSlave(scom,  BUFFER_SIZE * BK);
+    auto master = new CFMaster(mcom, BUFFER_SIZE * BK);
+
+    version (OSX)
+        master.writeTimeout = 2000.msecs;
+    else
+        master.writeTimeout = 200.msecs;
+
     void run()
     {
         bool work = true;
