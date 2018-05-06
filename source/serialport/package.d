@@ -31,12 +31,7 @@ import std.random;
 import std.process;
 import core.thread;
 
-version (linux)
-    enum BUFFER_SIZE = 1024;
-version (OSX)
-    enum BUFFER_SIZE = 256;
-version (Windows)
-    enum BUFFER_SIZE = 1024;
+enum BUFFER_SIZE = 1024;
 
 interface ComPipe
 {
@@ -200,11 +195,15 @@ void threadTest(SPT)(string[2] ports)
 
     scope (exit) com.close();
 
+    version (linux) enum NN = 0;
+    version (OSX) enum NN = BUFFER_SIZE >> 2;
+    version (Windows) enum NN = 0;
+
     enum origList = [
         "one",
         "one two",
         "one two three",
-        "x".repeat(BUFFER_SIZE-2).join
+        "x".repeat(BUFFER_SIZE-NN).join
     ];
 
     string[] list;
