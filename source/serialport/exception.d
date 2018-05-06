@@ -15,6 +15,19 @@ class SerialPortException : Exception
 }
 
 ///
+class SysCallException : SerialPortException
+{
+    int err;
+
+    this(string msg, int err, string file=__FILE__, size_t line=__LINE__)
+        @safe pure nothrow @nogc
+    {
+        this.err = err;
+        super(msg, file, line);
+    }
+}
+
+///
 class ParseModeException : SerialPortException
 {
     ///
@@ -59,22 +72,6 @@ class PortClosedException : SerialPortException
     {
         this.port = port;
         super("serial port '" ~ port ~ "' is closed", file, line);
-    }
-}
-
-///
-class SetupFailException : SerialPortException
-{
-    ///
-    string port;
-
-    ///
-    this(string port, string reason="", string file=__FILE__, size_t line=__LINE__)
-        @safe pure nothrow
-    {
-        this.port = port;
-        super("Unable to open serial port '" ~ port ~ "'" ~
-                    (reason ? " (" ~ reason ~ ")" : ""), file, line);
     }
 }
 
