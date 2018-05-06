@@ -88,7 +88,7 @@ ComPipe getPlatformComPipe(int bufsz)
     import std.stdio : stderr;
     stderr.writeln("available ports: ", SerialPort.listAvailable);
 
-    version (Posix) return new SocatPipe(bufsz);
+    version (linux) return new SocatPipe(bufsz);
     else
     {
         pragma(msg, "platform doesn't support, no real test");
