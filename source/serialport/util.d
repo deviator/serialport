@@ -34,9 +34,12 @@ struct PairList(A,B)
             if (f.empty) return defalutValue;
             else return f.front.a;
         }
+    }
 
-        auto allA2B(A a) { return list.find!(v=>v.a == a); }
-        auto allB2A(B b) { return list.find!(v=>v.b == b); }
+    @safe pure nothrow const
+    {
+        auto allA2B(A a) { return list.filter!(v=>v.a == a).map!(v=>v.b); }
+        auto allB2A(B b) { return list.filter!(v=>v.b == b).map!(v=>v.a); }
     }
 }
 
@@ -69,4 +72,20 @@ unittest
     );
 
     static assert(pl.firstA2B(2, "ok") == "world");
+}
+
+unittest
+{
+    import std.algorithm;
+    import std.string;
+
+    immutable pl = pairList(
+        pair(1, "hello"),
+        pair(2, "okda"),
+        pair(1, "world"),
+        pair(3, "okda")
+    );
+
+    assert(pl.allA2B(1).join(" ") == "hello world");
+    assert(pl.allB2A("okda").sum == 5);
 }
