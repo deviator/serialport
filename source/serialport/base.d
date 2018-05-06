@@ -302,7 +302,7 @@ public:
         +/
     static string[] listAvailable() @property
     {
-        version (Posix)
+        version (linux)
         {
             import std.file : exists;
             return dirEntries("/sys/class/tty", SpanMode.shallow)
@@ -312,6 +312,10 @@ public:
                     ~
                     dirEntries("/dev/pts", SpanMode.shallow)
                     .map!(a=>a.name).array.sort.array;
+        }
+        version (OSX)
+        {
+            return dirEntries("/dev/", "{tty,cu}*", SpanMode.shallow).array;
         }
         version (Windows)
         {
