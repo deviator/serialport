@@ -130,63 +130,58 @@ static immutable string modeSplitChar=":";
 
 version (Posix)
 {
+    import serialport.util;
+
     version (OSX)
     {
         /+
         38400 is max for OSX
         http://www.manpages.info/macosx/cfsetospeed.3.html
          +/
-        enum unixBaudList = [    0: B0,
-                                50: B50, 
-                                75: B75,
-                               110: B110,
-                               134: B134,
-                               150: B150,   
-                               200: B200,  
-                               300: B300,
-                               600: B600,
-                              1200: B1200, 
-                              1800: B1800, 
-                              2400: B2400,
-                              4800: B4800,
-                              9600: B9600,
-                             19200: B19200,
-                             38400: B38400 ];
+        static immutable unixBaudList = pairList(
+            pair(    0, B0),
+            pair(   50, B50),
+            pair(   75, B75),
+            pair(  110, B110),
+            pair(  134, B134),
+            pair(  150, B150),   
+            pair(  200, B200),  
+            pair(  300, B300),
+            pair(  600, B600),
+            pair( 1200, B1200), 
+            pair( 1800, B1800), 
+            pair( 2400, B2400),
+            pair( 4800, B4800),
+            pair( 9600, B9600),
+            pair(19200, B19200),
+            pair(38400, B38400)
+        );
     }
     else
     {
-        enum unixBaudList = [    0: B0,
-                                50: B50, 
-                                75: B75,
-                               110: B110,
-                               134: B134,
-                               150: B150,   
-                               200: B200,  
-                               300: B300,
-                               600: B600,
-                              1200: B1200, 
-                              1800: B1800, 
-                              2400: B2400,
-                              4800: B4800,
-                              9600: B9600,
-                             19200: B19200,
-                             38400: B38400,
-                             57600: B57600,
-                            115200: B115200,
-                            230400: B230400 ];
+        static immutable unixBaudList = pairList(
+            pair(     0, B0),
+            pair(    50, B50), 
+            pair(    75, B75),
+            pair(   110, B110),
+            pair(   134, B134),
+            pair(   150, B150),   
+            pair(   200, B200),  
+            pair(   300, B300),
+            pair(   600, B600),
+            pair(  1200, B1200), 
+            pair(  1800, B1800), 
+            pair(  2400, B2400),
+            pair(  4800, B4800),
+            pair(  9600, B9600),
+            pair( 19200, B19200),
+            pair( 38400, B38400),
+            pair( 57600, B57600),
+            pair(115200, B115200),
+            pair(230400, B230400) 
+        );
     }
 
-    enum unixUintBaudList = invert(unixBaudList);
-
-    private auto invert(T)(T list)
-    {
-        static if (is(T == V[K], V, K))
-        {
-            K[V] ret;
-            foreach (key; list.keys)
-                ret[list[key]] = key;
-            return ret;
-        }
-        else static assert(0, "unsupported type");
-    }
+    static assert(unixBaudList.isUniqA, "not uniq A vals in unix baud list");
+    static assert(unixBaudList.isUniqB, "not uniq B vals in unix baud list");
 }
