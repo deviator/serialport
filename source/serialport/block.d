@@ -117,14 +117,14 @@ public:
         version (Posix)
         {
             size_t written;
-            auto ttm = arr.length * writeTimeoutMult + writeTimeout;
+            const ttm = arr.length * writeTimeoutMult + writeTimeout;
             const full = StopWatch(AutoStart.yes);
             while (written < arr.length)
             {
                 if (full.peek > ttm)
                     throw new TimeoutException(port);
 
-                auto res = posixWrite(_handle, arr[written..$].ptr, arr.length - written);
+                const res = posixWrite(_handle, arr[written..$].ptr, arr.length - written);
 
                 if (res < 0)
                     throw new WriteException(port, text("errno ", errno));

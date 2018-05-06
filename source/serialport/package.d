@@ -85,7 +85,7 @@ unittest
 
 ComPipe getPlatformComPipe(int bufsz)
 {
-    import std.stdio;
+    import std.stdio : stderr;
     stderr.writeln("available ports: ", SerialPort.listAvailable);
 
     version (Posix) return new SocatPipe(bufsz);
@@ -164,14 +164,8 @@ void threadTest(SPT)(string[2] ports)
                 send(ownerTid, cast(string)(data.idup));
 
             receiveTimeout(100.msecs,
-                (SPConfig cfg)
-                {
-                    com.config = cfg;
-                },
-                (End e)
-                {
-                    work = false;
-                }
+                (SPConfig cfg) { com.config = cfg; },
+                (End e) { work = false; }
             );
         }
 

@@ -1,4 +1,4 @@
-### SerialPort
+# SerialPort
 
 [![Build Status](https://travis-ci.org/deviator/serialport.svg?branch=master)](https://travis-ci.org/deviator/serialport)
 [![Build status](https://ci.appveyor.com/api/projects/status/64m852qc8j3re1y1?svg=true)](https://ci.appveyor.com/project/deviator/serialport)
@@ -11,7 +11,7 @@
 
 Library provides simple work with serial port for Linux, Windows and MacOS.
 
-Simple usage:
+### Simple usage
 
 ```d
 auto com = new SerialPortBlk("/dev/ttyUSB0", 19200);
@@ -33,10 +33,10 @@ auto res1 = com.read(bufferForReading);
 `SerialPortNonBlk` provides non-blocking `read` (immediatlly return data in system serial port buffer)
 and `write` (return writed bytes count at the first onset).
 
-#### Warning: unix systems allow only standard speeds
-#### [0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]
+**Warning: unix systems allow only standard speeds**
+**[0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]**
 
-Example usage: [monitor](example/monitor)
+### Example: [monitor](example/monitor)
 
 If you want use read/write loops in fibers you can use `SerialPortFR` class.
 

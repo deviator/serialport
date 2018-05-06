@@ -131,7 +131,7 @@ public:
         const for disallow `com.config.set(value)`
         use `com.set(value)` instead
      +/
-    const(Config) config() @property
+    const(Config) config() @property const
     {
         if (closed) throw new PortClosedException(port);
 
@@ -371,19 +371,19 @@ protected:
 
     version (Posix)
     {
-        void m_tcgetattr(termios* t)
+        void m_tcgetattr(termios* t) const
         {
             if (tcgetattr(_handle, t) == -1)
                 throw new SysCallException("tcgetattr", errno);
         }
 
-        void m_tcsetattr(int v, const(termios*) t)
+        void m_tcsetattr(int v, const(termios*) t) inout
         {
             if (tcsetattr(_handle, v, t) == -1)
                 throw new SysCallException("tcsetattr", errno);
         }
 
-        void m_ioctl(int v, termios2* t)
+        void m_ioctl(int v, termios2* t) inout
         {
             if (ioctl(_handle, v, t) == -1)
                 throw new SysCallException("ioctl", errno);
@@ -464,7 +464,7 @@ protected:
             }
         }
 
-        uint getUintBaudRate()
+        uint getUintBaudRate() const
         {
             version (usetermios2)
             {
