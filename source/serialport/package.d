@@ -196,7 +196,7 @@ void threadTest(SPT)(string[2] ports)
     scope (exit) com.close();
 
     version (linux) enum NN = 0;
-    version (OSX) enum NN = BUFFER_SIZE >> 2;
+    version (OSX) enum NN = BUFFER_SIZE >> 1;
     version (Windows) enum NN = 0;
 
     enum origList = [
