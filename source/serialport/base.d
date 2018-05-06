@@ -383,10 +383,13 @@ protected:
                 throw new SysCallException("tcsetattr", errno);
         }
 
-        void m_ioctl(int v, termios2* t) inout
+        version (usetermios2)
         {
-            if (ioctl(_handle, v, t) == -1)
-                throw new SysCallException("ioctl", errno);
+            void m_ioctl(int v, termios2* t) inout
+            {
+                if (ioctl(_handle, v, t) == -1)
+                    throw new SysCallException("ioctl", errno);
+            }
         }
 
         void posixSetup(Config conf)
