@@ -158,7 +158,7 @@ public:
         version (Windows)
         {
             DCB cfg;
-            GetCommState(_handle, &cfg);
+            GetCommState(cast(SPHandle)_handle, &cfg);
 
             ret.baudRate = cast(uint)cfg.BaudRate;
 
