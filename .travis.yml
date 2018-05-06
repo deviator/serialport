@@ -28,4 +28,4 @@ script:
   - dub test --compiler=${DC} --build=unittest-cov
 
 after_success:
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then bash <(curl -s https://codecov.io/bash); fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" && ${DC} == "dmd" ]]; then bash <(curl -s https://codecov.io/bash); fi
