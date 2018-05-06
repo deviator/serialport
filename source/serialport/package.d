@@ -89,6 +89,7 @@ ComPipe getPlatformComPipe(int bufsz)
     stderr.writeln("available ports: ", SerialPort.listAvailable);
 
     version (linux) return new SocatPipe(bufsz);
+    else version (OSX) return new SocatPipe(bufsz);
     else
     {
         pragma(msg, "platform doesn't support, no real test");
