@@ -110,30 +110,32 @@ unittest
     }
     void reopen()
     {
+        stderr.writeln("\n");
+        Thread.sleep(150.msecs);
         cp.open();
         stderr.writefln("run command `%s`", cp.command);
         stderr.writefln("pipe ports: %s <=> %s", cp.ports[0], cp.ports[1]);
     }
 
     reopen();
-    utCall!threadTest(cp.ports);
+    utCall!(threadTest!SerialPortNonBlk)("thread test for non-block", cp.ports);
 
-    stderr.writeln("\n");
-    Thread.sleep(150.msecs);
     reopen();
-    utCall!fiberTest(cp.ports);
+    utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);
+
+    reopen();
+    utCall!fiberTest("fiber test", cp.ports);
 }
 
-auto utCall(alias fnc, Args...)(Args args)
+auto utCall(alias fnc, Args...)(string fname, Args args)
 {
-    enum fname = __traits(identifier, fnc);
     stderr.writefln("--- run %s ---", fname);
     scope (success) stderr.writefln("--- success %s ---", fname);
     scope (failure) stderr.writefln("!!! failure %s !!!", fname);
     return fnc(args);
 }
 
-void threadTest(string[2] ports)
+void threadTest(SPT)(string[2] ports)
 {
     assert(SerialPort.listAvailable.length != 0);
 
@@ -142,7 +144,7 @@ void threadTest(string[2] ports)
 
     static void echoThread(string port)
     {
-        auto com = new SerialPortNonBlk(port, "2400:8N1");
+        auto com = new SPT(port, "2400:8N1");
         scope (exit) com.close();
 
         com.set(1200);
@@ -168,19 +170,17 @@ void threadTest(string[2] ports)
                 },
                 (End e)
                 {
-                    stderr.writeln("echoThread receive 'end'");
                     work = false;
                 }
             );
         }
 
-        stderr.writeln("echoThread send 'end'");
         send(ownerTid, end);
     }
 
     auto t = spawn(&echoThread, ports[1]);
 
-    auto com = new SerialPortNonBlk(ports[0], 19200);
+    auto com = new SPT(ports[0], 19200);
 
     assert(com.baudRate == 19200);
     assert(com.dataBits == DataBits.data8);
