@@ -173,7 +173,7 @@ void threadTest(SPT)(string[2] ports)
             receiveTimeout(100.msecs,
                 (SPConfig cfg) { com.config = cfg; },
                 (End e) { work = false; },
-                (OwnerTerminated) { work = false; }
+                (OwnerTerminated e) { work = false; }
             );
         }
 
