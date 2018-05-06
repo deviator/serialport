@@ -10,10 +10,12 @@ else static assert(0, "unsupported platform");
 
 public
 {
-    import serialport.exception;
-    import serialport.port;
-    import serialport.types;
+    import serialport.base;
     import serialport.config;
+    import serialport.block;
+    import serialport.nonblock;
+    import serialport.exception;
+    import serialport.types;
 }
 
 version (unittest): private:
@@ -83,17 +85,19 @@ unittest
 
 ComPipe getPlatformComPipe(int bufsz)
 {
+    import std.stdio;
+    stderr.writeln("available ports: ", SerialPort.listAvailable);
+
     version (Posix) return new SocatPipe(bufsz);
     else
     {
         pragma(msg, "platform doesn't support, no real test");
-        import std.stdio;
-        stderr.writeln(SerialPort.listAvailable);
         return null;
     }
 }
 
 // real test main
+//version (realtest)
 unittest
 {
     stderr.writeln("=== start real test ===\n");
@@ -138,7 +142,7 @@ void threadTest(string[2] ports)
 
     static void echoThread(string port)
     {
-        auto com = new SerialPort(port, "2400:8N1");
+        auto com = new SerialPortNonBlk(port, "2400:8N1");
         scope (exit) com.close();
 
         com.set(1200);
@@ -158,7 +162,7 @@ void threadTest(string[2] ports)
                 send(ownerTid, cast(string)(data.idup));
 
             receiveTimeout(100.msecs,
-                (SerialPort.Config cfg)
+                (SPConfig cfg)
                 {
                     com.config = cfg;
                 },
@@ -176,7 +180,7 @@ void threadTest(string[2] ports)
 
     auto t = spawn(&echoThread, ports[1]);
 
-    auto com = new SerialPort(ports[0], 19200);
+    auto com = new SerialPortNonBlk(ports[0], 19200);
 
     assert(com.baudRate == 19200);
     assert(com.dataBits == DataBits.data8);
@@ -278,9 +282,9 @@ void fiberTest(string[2] ports)
     {
         void[] data;
 
-        SerialPortBL com;
+        SerialPortFR com;
 
-        this(SerialPortBL com, size_t bufsize)
+        this(SerialPortFR com, size_t bufsize)
         {
             this.com = com;
             this.data = new void[bufsize];
@@ -294,7 +298,7 @@ void fiberTest(string[2] ports)
     {
         void[] result;
 
-        this(SerialPortBL com, size_t bufsize)
+        this(SerialPortFR com, size_t bufsize)
         { super(com, bufsize); }
 
         override void run() { result = com.readLoop(data, 40.msecs, 10.msecs); }
@@ -304,7 +308,7 @@ void fiberTest(string[2] ports)
     {
         CFSlave slave;
 
-        this(SerialPortBL com, size_t bufsize)
+        this(SerialPortFR com, size_t bufsize)
         {
             super(com, bufsize);
             foreach (ref v; cast(ubyte[])data)
@@ -314,8 +318,8 @@ void fiberTest(string[2] ports)
         override void run() { com.writeLoop(data, 20.msecs); }
     }
 
-    auto slave = new CFSlave(new SerialPortBL(ports[0]), BUFFER_SIZE);
-    auto master = new CFMaster(new SerialPortBL(ports[1]), BUFFER_SIZE);
+    auto slave = new CFSlave(new SerialPortFR(ports[0]), BUFFER_SIZE);
+    auto master = new CFMaster(new SerialPortFR(ports[1]), BUFFER_SIZE);
 
     bool work = true;
     int step;
