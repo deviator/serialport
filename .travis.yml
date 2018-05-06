@@ -10,10 +10,6 @@ addons:
     packages:
       - socat
 
-#before_install:
-#  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update       ; fi
-#  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install socat; fi
-
 language: d
 d:
   - ldc
@@ -28,4 +24,4 @@ script:
   - dub test --compiler=${DC} --build=unittest-cov
 
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then bash <(curl -s https://codecov.io/bash) ; fi
