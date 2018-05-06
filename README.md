@@ -59,3 +59,31 @@ If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
 Reading and writing loops algorithms use `Fiber.yield` if available,
 or `Thread.yield` otherwise. If you want redefine this behavior, you can set
 `void delegate() yieldFunc` field of `SerialPort` through ctor or directly.
+
+### Tests
+
+For linux and OSX tested
+
+* ldc
+* ldc-beta
+* ldc-1.8.0
+* dmd
+* dmd-nightly
+* dmd-2.079.1
+* dmd-2.078.3
+
+For windows tested fox x86 and x64
+
+* dmd beta
+* dmd stable
+* ldc beta
+* ldc stable
+
+See [.travis.yml](.travis.yml) [.appveyor.yml](.appveyor.yml)
+
+### NOTE
+
+1. Windows not full tested (not real test with virtual com ports) by CI
+    because https://help.appveyor.com/discussions/questions/427-how-can-i-use-com0com
+
+2. OSX has strange limitation see [first](source/serialport/package.d#L200), [second](source/serialport/package.d#L367)
