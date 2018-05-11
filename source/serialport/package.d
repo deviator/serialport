@@ -236,37 +236,45 @@ void threadTest(SPT)(string[2] ports)
 
         while (work)
         {
-            if (needRead)
+            try
             {
-                auto data = com.read(buffer);
+                if (needRead)
+                {
+                    auto data = com.read(buffer);
 
-                if (data.length)
-                {
-                    stderr.writeln("child readed: ", cast(string)(data.idup));
-                    send(ownerTid, cast(string)(data.idup));
-                }
-            }
-
-            receiveTimeout(1.msecs,
-                (SPConfig cfg)
-                {
-                    com.config = cfg;
-                    stderr.writeln("child get cfg: ", cfg.mode);
-                    com.flush();
-                    stderr.writeln("flushed");
-                },
-                (bool nr)
-                {
-                    if (nr) needRead = true;
-                    else
+                    if (data.length)
                     {
-                        work = false;
-                        needRead = false;
+                        stderr.writeln("child readed: ", cast(string)(data.idup));
+                        send(ownerTid, cast(string)(data.idup));
                     }
-                    stderr.writeln("get needRead ", nr);
-                },
-                (OwnerTerminated e) { work = false; }
-            );
+                }
+
+                receiveTimeout(1.msecs,
+                    (SPConfig cfg)
+                    {
+                        com.config = cfg;
+                        stderr.writeln("child get cfg: ", cfg.mode);
+                        com.flush();
+                        stderr.writeln("flushed");
+                    },
+                    (bool nr)
+                    {
+                        if (nr) needRead = true;
+                        else
+                        {
+                            work = false;
+                            needRead = false;
+                        }
+                        stderr.writeln("get needRead ", nr);
+                    },
+                    (OwnerTerminated e) { work = false; }
+                );
+            }
+            catch (Throwable e)
+            {
+                stderr.writeln(e);
+                throw e;
+            }
         }
     }
 
