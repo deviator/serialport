@@ -86,6 +86,44 @@ class SocatPipe : ComPipe
     }
 }
 
+class DefinedPorts : ComPipe
+{
+    string[2] env;
+    string[2] _ports;
+
+    this(string[2] envNames = ["SERIALPORT_TEST_PORT1", "SERIALPORT_TEST_PORT2"])
+    { env = envNames; }
+
+override:
+
+    void open()
+    {
+        import std.process : environment;
+        import std.range : lockstep;
+        import std.algorithm : canFind;
+
+        auto lst = SerialPort.listAvailable;
+
+        foreach (ref e, ref p; lockstep(env[], _ports[]))
+        {
+            p = environment[e];
+            enforce(lst.canFind(p), new Exception("unknown port '%s' in env var '%s'".format(p, e)));
+        }
+    }
+
+    void close() { }
+
+    string command() const @property
+    {
+        return "env: %s=%s, %s=%s".format(
+            env[0], _ports[0],
+            env[1], _ports[1]
+        );
+    }
+
+    string[2] ports() const @property { return _ports; }
+}
+
 unittest
 {
     enum socat_out_ln = "2018/03/08 02:56:58 socat[30331] N PTY is /dev/pts/1";
@@ -98,12 +136,24 @@ ComPipe getPlatformComPipe(int bufsz)
     import std.stdio : stderr;
     stderr.writeln("available ports: ", SerialPort.listAvailable);
 
-    version (linux) return new SocatPipe(bufsz);
-    else version (OSX) return new SocatPipe(bufsz);
-    else
+    try
     {
-        pragma(msg, "platform doesn't support, no real test");
-        return null;
+        auto ret = new DefinedPorts;
+        ret.open();
+        return ret;
+    }
+    catch (Exception e)
+    {
+        stderr.writeln();
+        stderr.writeln("error while open predefined ports: ", e.msg);
+
+        version (linux) return new SocatPipe(bufsz);
+        else version (OSX) return new SocatPipe(bufsz);
+        else
+        {
+            pragma(msg, "platform doesn't support, no real test");
+            return null;
+        }
     }
 }
 
@@ -123,14 +173,14 @@ unittest
     {
         cp.close();
         stderr.writeln("\n");
-        Thread.sleep(150.msecs);
+        Thread.sleep(250.msecs);
         cp.open();
         stderr.writefln("run command `%s`", cp.command);
         stderr.writefln("pipe ports: %s <=> %s", cp.ports[0], cp.ports[1]);
     }
 
     reopen();
-    utCall!(threadTest!SerialPort)("thread test for non-block", cp.ports);
+    utCall!(threadTest!SerialPortFR)("thread test for non-block", cp.ports);
 
     version (readAvailable)
     {
@@ -166,43 +216,64 @@ void threadTest(SPT)(string[2] ports)
 {
     assert(SerialPort.listAvailable.length != 0);
 
-    static struct End {}
-    static End end() @property { return End.init; }
-
     static void echoThread(string port)
     {
+        void[BUFFER_SIZE] buffer = void;
         auto com = new SPT(port, "2400:8N1");
         scope (exit) com.close();
+        com.flush();
 
         com.set(1200);
         assert(com.config.baudRate == 1200);
 
-        com.baudRate = 19200;
-        assert(com.config.baudRate == 19200);
+        com.baudRate = 38400;
+        assert(com.config.baudRate == 38400);
 
         bool work = true;
-        void[BUFFER_SIZE] buffer = void;
+        com.readTimeout = 2500.msecs;
+
+        bool needRead = false;
 
         while (work)
         {
-            auto data = com.read(buffer);
+            if (needRead)
+            {
+                auto data = com.read(buffer);
 
-            if (data.length)
-                send(ownerTid, cast(string)(data.idup));
+                if (data.length)
+                {
+                    stderr.writeln("child readed: ", cast(string)(data.idup));
+                    send(ownerTid, cast(string)(data.idup));
+                }
+            }
 
-            receiveTimeout(100.msecs,
-                (SPConfig cfg) { com.config = cfg; },
-                (End e) { work = false; },
+            receiveTimeout(1.msecs,
+                (SPConfig cfg)
+                {
+                    com.config = cfg;
+                    stderr.writeln("child get cfg: ", cfg.mode);
+                    com.flush();
+                    stderr.writeln("flushed");
+                },
+                (bool nr)
+                {
+                    if (nr) needRead = true;
+                    else
+                    {
+                        work = false;
+                        needRead = false;
+                    }
+                    stderr.writeln("get needRead ", nr);
+                },
                 (OwnerTerminated e) { work = false; }
             );
         }
-
-        send(ownerTid, end);
     }
 
-    auto t = spawn(&echoThread, ports[1]);
+    auto t = spawnLinked(&echoThread, ports[1]);
 
     auto com = new SPT(ports[0], 19200);
+    com.flush();
 
     assert(com.baudRate == 19200);
     assert(com.dataBits == DataBits.data8);
@@ -216,9 +287,7 @@ void threadTest(SPT)(string[2] ports)
 
     scope (exit) com.close();
 
-    version (linux) enum NN = BUFFER_SIZE;
-    version (OSX) enum NN = BUFFER_SIZE / 8;
-    version (Windows) enum NN = BUFFER_SIZE;
+    enum NN = BUFFER_SIZE;
 
     enum origList = [
         "one",
@@ -232,7 +301,7 @@ void threadTest(SPT)(string[2] ports)
     auto sets = [
         SPConfig.parse("9600:8N1"),
         SPConfig(38400),
-        SPConfig(1200),
+        SPConfig(2400),
         SPConfig.parse("19200:8N2"),
     ];
 
@@ -241,6 +310,8 @@ void threadTest(SPT)(string[2] ports)
     void initList()
     {
         com.config = sets.front;
+        com.flush();
+        stderr.writeln("owner set cfg: ", com.config.mode);
         send(t, sets.front);
         msg = sets.front.mode;
         sets.popFront;
@@ -251,6 +322,7 @@ void threadTest(SPT)(string[2] ports)
     com.write(msg);
 
     bool work = true;
+    send(t, true);
     while (work)
     {
         receive(
@@ -264,7 +336,7 @@ void threadTest(SPT)(string[2] ports)
                     {
                         work = false;
                         stderr.writeln("ownerThread send 'end'");
-                        send(t, end);
+                        send(t, false);
                     }
                     else initList();
                 }
@@ -275,11 +347,13 @@ void threadTest(SPT)(string[2] ports)
                 }
 
                 com.write(msg);
+                stderr.writeln("owner write msg to com: ", msg);
             },
-            (End e)
+            (LinkTerminated e)
             {
+                stderr.writeln("link terminated");
                 work = false;
-                stderr.writeln("ownerThread receive 'end'");
+                assert(e.tid == t);
             },
             (Throwable e)
             {
@@ -288,18 +362,6 @@ void threadTest(SPT)(string[2] ports)
             }
         );
     }
-
-    /+
-    version (Posix) // socat not supported
-    {
-        assertThrown!SerialPortException(com.set(DataBits.data5));
-        assertThrown!SerialPortException(com.set(DataBits.data6));
-        assertThrown!SerialPortException(com.set(DataBits.data7));
-        assertThrown!SerialPortException(com.set(StopBits.onePointFive));
-        // on my system but not in travis
-        //assertThrown!SerialPortException(com.set(Parity.even));
-    }
-    +/
 }
 
 class CF : Fiber
@@ -311,6 +373,7 @@ class CF : Fiber
     this(SerialPortFR com, size_t bufsize)
     {
         this.com = com;
+        this.com.flush();
         this.data = new void[bufsize];
         super(&run);
     }
@@ -329,7 +392,11 @@ class CFSlave : CF
     { super(com, bufsize); }
 
     override void run()
-    { result = com.readLoop(data, readTimeout, readGapTimeout); }
+    {
+        stderr.writeln("start readLoop");
+        result = com.readLoop(data, readTimeout, readGapTimeout);
+        stderr.writeln("finish readLoop");
+    }
 }
 
 class CFMaster : CF
@@ -345,7 +412,12 @@ class CFMaster : CF
             v = uniform(ubyte(0), ubyte(128));
     }
 
-    override void run() { com.writeLoop(data, writeTimeout); }
+    override void run()
+    {
+        stderr.writeln("start writeLoop");
+        com.writeLoop(data, writeTimeout);
+        stderr.writeln("finish writeLoop");
+    }
 }
 
 void fiberTest(string[2] ports)
@@ -357,24 +429,29 @@ void fiberTest(string[2] ports)
     int step;
     while (work)
     {
-        if (master.state != Fiber.State.TERM) master.call;
-        if (slave.state != Fiber.State.TERM) slave.call;
+        alias TERM = Fiber.State.TERM;
+        if (master.state != TERM) master.call;
+        if (slave.state != TERM) slave.call;
 
         step++;
-        Thread.sleep(250.nsecs);
-        if (slave.result.length == master.data.length)
+        Thread.sleep(30.msecs);
+        if (master.state == TERM && slave.state == TERM)
         {
-            import std.algorithm : equal;
-            enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
-            work = false;
-            writeln("basic loop steps: ", step);
+            if (slave.result.length == master.data.length)
+            {
+                import std.algorithm : equal;
+                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
+                work = false;
+                writeln("basic loop steps: ", step);
+            }
+            else throw new Exception(text(slave.result, " != ", master.data));
         }
     }
 }
 
 void fiberTest2(string[2] ports)
 {
-    string mode = "19200:8N1";
+    string mode = "38400:8N1";
 
     auto scom = new SerialPortFR(ports[0], 9600, "8N1");
     auto mcom = new SerialPortFR(ports[1], "19200:8N1");
@@ -383,19 +460,17 @@ void fiberTest2(string[2] ports)
         assertThrown!UnsupportedException(scom.baudRate = 9200);
 
     scom.reopen(ports[0], SPConfig.parse(mode));
+    mcom.reopen(ports[1], SPConfig.parse(mode));
+    scom.flush();
+    mcom.flush();
 
-    version (OSX)
-        enum BK = 32;
-    else
-        enum BK = 1024;
+    scom.readTimeout = 1000.msecs;
+    mcom.writeTimeout = 10.msecs;
+
+    enum BK = 4;
 
     auto slave  = new CFSlave(scom,  BUFFER_SIZE * BK);
     auto master = new CFMaster(mcom, BUFFER_SIZE * BK);
-
-    version (OSX)
-        master.writeTimeout = 2000.msecs;
-    else
-        master.writeTimeout = 200.msecs;
 
     void run()
     {
@@ -404,10 +479,10 @@ void fiberTest2(string[2] ports)
         while (work)
         {
             if (master.state != Fiber.State.TERM) master.call;
+            Thread.sleep(20.msecs);
             if (slave.state != Fiber.State.TERM) slave.call;
 
             step++;
-            Thread.sleep(250.nsecs);
             if (slave.result.length == master.data.length)
             {
                 import std.algorithm : equal;
@@ -419,15 +494,6 @@ void fiberTest2(string[2] ports)
     }
 
     run();
-
-    scom.reopen(scom.name, scom.config);
-    mcom.reopen(mcom.name, mcom.config);
-
-    master.writeTimeout = 10.msecs;
-    master.reset();
-    slave.reset();
-    slave.result = [];
-    assertThrown!TimeoutException(run());
 }
 
 void readTimeoutTest(string[2] ports)
@@ -436,43 +502,51 @@ void readTimeoutTest(string[2] ports)
 
     auto comA = new SerialPortFR(ports[0], 19200);
     void[1024] buffer = void;
+    try while (true) comA.read(buffer); catch (TimeoutException) {} // flush
     assertThrown!TimeoutException(comA.readAll(buffer[], 1.msecs, 1.msecs));
 
     auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
+    try while (true) comB.read(buffer); catch (TimeoutException) {} // flush
     comB.readTimeout = 1.msecs;
     assertThrown!TimeoutException(comB.read(buffer[]));
 }
 
 void readTimeoutTestConfig(SP : SerialPortTm)(string[2] ports)
 {
-    enum mode = "9600:8N1";
+    enum mode = "38400:8N1";
 
     enum FULL = 100;
-    enum SEND = 10;
+    enum SEND = "helloworld";
 
     static void thfunc(string port)
     {
         auto com = new SP(port, mode);
+        com.flush();
         scope (exit) com.close();
-        enum data = "helloworld";
-        static assert(data.length == SEND);
-        com.write(data);
+        com.write(SEND);
     }
 
     auto com = new SP(ports[0], mode);
-        com.readTimeout = 50.msecs;
     scope (exit) com.close();
+    auto rt = 100.msecs;
+    com.readTimeout = rt;
+    com.flush();
+    assert(com.readTimeout == rt);
 
     void[FULL] buffer = void;
     void[] data;
 
-    auto t = spawn(&thfunc, ports[1]);
+    auto t = spawnLinked(&thfunc, ports[1]);
+
+    Thread.sleep(rt);
 
     version (readAvailable)
     {
         assertNotThrown(data = com.read(buffer));
-        assert(data.length == SEND);
+        assert(cast(string)data == SEND);
     }
     version (readAllOrThrow)
         assertThrown!TimeoutException(data = com.read(buffer));
+
+    receive((LinkTerminated e) { assert(e.tid == t); });
 }
