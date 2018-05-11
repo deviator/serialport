@@ -11,7 +11,7 @@
 
 Library provides versatile work with serial port for Linux, Windows and MacOS.
 
-### Simple usage
+## Simple usage
 
 ```d
 auto com = new SerialPortBlk("/dev/ttyUSB0", 19200);
@@ -30,28 +30,98 @@ auto cnt = com.write(someDataArray);
 auto res1 = com.read(bufferForReading);
 ```
 
-`SerialPortNonBlk` provides non-blocking `read` (immediatlly return data in system serial port buffer)
+See also example: [monitor](example/monitor).
+
+`SerialPort` (`alias SerialPortNonBlk = SerialPort`) provides non-blocking
+`read` (immediatlly return data in system serial port buffer)
 and `write` (return writed bytes count at the first onset).
 
-**Warning: unix systems allow only standard speeds**
-**[0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]**
+If you want use library in fiber it provides `SerialPortFR` (Fiber Ready),
+where `read` and `write` is loops with calling sleep function. Loops algorithms
+use `Fiber.yield` if available, or `Thread.yield` as failback. If you want
+redefine this behavior, you can set `void delegate(Duration) sleepFunc` field
+of `SerialPortFR` through ctor or directly.
 
-### Example: [monitor](example/monitor)
+`write` method of `SerialPortBlk` and `SerialPortFR` can throw `TimeoutException`
+if it can't finish write all data to serial port during
+`timeout = writeTimeout + writeTimeoutMult * data.length`.
 
-If you want use read/write loops in fibers you can use `SerialPortFR` class.
+`read` method in `SerialPortBlk` and `SerialPortFR` can throw `TimeoutException`.
 
-```d
-//                                                      vibe.core.sleep for example
-auto com = new SerialPortFR("/dev/ttyUSB0", "9600:8N1", sleepDelegate);
+Also, `read` method of thouse can throw `TimeoutException`, but here the
+behavior can be different. See [library configuration](#library-configurations).
 
-//                            write timeout
-com.writeLoop(someDataArray, 500.dur!"usecs");
+## Library configurations
 
-//                                          read timeout    frame end gap
-auto res2 = com.readLoop(bufferForReading, 500.dur!"msecs", 20.dur!"msecs");
+```
+---|-------|--------------|-------|--> t
+   |       |              |       |
+ read      |              |       |
+   |       |              |       |
+   |       |<----data receive---->|
+   |       |=====   ====  | ======|
+   |       |              |
+   |       |<-readedData->|
+   |                      | 
+   |<---readTimeoutSum--->|
 ```
 
-At expiration of write timeout throws `TimeoutException`.
+where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
+
+### `readAvailable` (default configuration)
+
+```d
+if (readedData.length == 0)
+    throw TimeoutException(port);
+```
+
+### `readAllOrThrow`
+```d
+if (readedData.length < dataBuffer.length)
+    throw TimeoutException(port);
+```
+
+For using this configuration set in your `dub.sdl`
+`subConfiguration "serialport" "readAllOrThrow"`
+
+## `SerialPortFR.readAll` method
+
+Undepend of configuration `SerialPortFR` has `readAll` method
+
+    void[] readAll(void[] arr, Duration timeout=1.seconds, Duration frameGap=50.msecs)
+
+It reads in loop from serial port while silent time is less what `frameGap` and
+throws `TimeoutException` only if timeout is expires and no data was readed.
+
+```
+---|-------|---|--------------|-----|------------> t
+   |       |   |              |     |
+ read      |   |              |     |
+   |       |   |              |     |
+   |       |<---------data receive---------->|
+   |       |====   === === ===|     |   |== =|
+   |       |   |   |          |     |
+   |<-timeout->|   |          |     |
+   |      >|---|< if readedData.length > 0 then continue reading, else
+   |       |   |   |        throw TimeoutException
+   |       |   |   |          |     |
+   |       |  >|---|< first silent, if < frameGap then continue reading
+   |       |                  |     |
+   |       |                 >|-----|< this silent > frameGap, stop
+   |       |                  |          reading and return readedData
+   |       |<---readedData--->|
+```
+
+It's useful if you don't know how much data can come:
+
+* allocate buffer for reading (4kB for example)
+* call `readAll` and get data frame
+
+## Warning
+
+**unix systems allow only standard speeds:**
+
+**[0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]**
 
 At expiration of read timeout throws `TimeoutException` if no bytes readed.
 If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
@@ -60,7 +130,7 @@ Reading and writing loops algorithms use `Fiber.yield` if available,
 or `Thread.yield` otherwise. If you want redefine this behavior, you can set
 `void delegate() yieldFunc` field of `SerialPort` through ctor or directly.
 
-### Tests
+## Tests
 
 For linux and OSX tested
 
@@ -84,6 +154,7 @@ See [.travis.yml](.travis.yml) [.appveyor.yml](.appveyor.yml)
 ### NOTE
 
 1. Windows not full tested (not real test with virtual com ports) by CI
-    because https://help.appveyor.com/discussions/questions/427-how-can-i-use-com0com
+    because I did not configure to adjust the work com0com program 
+    https://help.appveyor.com/discussions/questions/427-how-can-i-use-com0com 
 
 2. OSX has strange limitation see [first](source/serialport/package.d#L200), [second](source/serialport/package.d#L367)
