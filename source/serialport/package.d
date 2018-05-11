@@ -5,6 +5,9 @@
  +/
 module serialport;
 
+version (readAvailable) {} else version (readAllOrThrow) {}
+else static assert(0, "one of readAvailable or readAllOrThrow must be selected");
+
 version (Posix) {} else version (Windows) {}
 else static assert(0, "unsupported platform");
 
@@ -36,6 +39,7 @@ enum BUFFER_SIZE = 1024;
 interface ComPipe
 {
     void open();
+    void close();
     string command() const @property;
     string[2] ports() const @property;
 }
@@ -60,6 +64,12 @@ class SocatPipe : ComPipe
         enforce(ret.startsWith("/dev/"),
         "unexpected last word in output line '%s'".format(ln));
         return ret;
+    }
+
+    override void close()
+    {
+        if (pipe.pid is null) return;
+        kill(pipe.pid);
     }
 
     override void open()
@@ -111,6 +121,7 @@ unittest
     }
     void reopen()
     {
+        cp.close();
         stderr.writeln("\n");
         Thread.sleep(150.msecs);
         cp.open();
@@ -119,7 +130,7 @@ unittest
     }
 
     reopen();
-    utCall!(threadTest!SerialPortNonBlk)("thread test for non-block", cp.ports);
+    utCall!(threadTest!SerialPort)("thread test for non-block", cp.ports);
 
     reopen();
     utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);

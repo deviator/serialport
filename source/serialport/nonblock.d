@@ -4,6 +4,7 @@ module serialport.nonblock;
 import serialport.base;
 
 ///
+deprecated("use SerialPort instead")
 class SerialPortNonBlk : SerialPort
 {
 public:
@@ -25,81 +26,11 @@ public:
 
     /// ditto
     this(string port, Config conf) { super(port, conf); }
-
-    override void[] read(void[] buf)
-    {
-        if (closed) throw new PortClosedException(port);
-
-        auto ptr = buf.ptr;
-        auto len = buf.length;
-
-        size_t res;
-
-        version (Posix)
-        {
-            auto sres = posixRead(_handle, ptr, len);
-
-            // no bytes for read, it's ok
-            if (sres < 0)
-            {
-                if (errno == EAGAIN) sres = 0;
-                else throw new ReadException(port, text("errno ", errno));
-            }
-            res = sres;
-        }
-        version (Windows)
-        {
-            uint sres;
-            auto rfr = ReadFile(_handle, ptr, cast(uint)len, &sres, null);
-            if (!rfr)
-            {
-                auto err = GetLastError();
-                if (err == ERROR_IO_PENDING) { /+ buffer empty +/ }
-                else throw new ReadException(port, text("error ", err));
-            }
-            res = sres;
-        }
-
-        return buf[0..res];
-    }
-
-    override ptrdiff_t write(const(void[]) arr)
-    {
-        if (closed) throw new PortClosedException(port);
-
-        ptrdiff_t res;
-        auto ptr = arr.ptr;
-        auto len = arr.length;
-
-        version (Posix)
-        {
-            res = posixWrite(_handle, ptr, len);
-            if (res < 0)
-            {
-                if (errno == EAGAIN) res = 0; // buffer filled
-                else throw new WriteException(port, text("errno ", errno));
-            }
-        }
-        version (Windows)
-        {
-            uint sres;
-            auto wfr = WriteFile(_handle, ptr, cast(uint)len, &sres, null);
-            if (!wfr)
-            {
-                auto err = GetLastError();
-                if (err == ERROR_IO_PENDING) { /+ buffer filled +/ }
-                else throw new WriteException(port, text("error ", err));
-            }
-            res = sres;
-        }
-
-        return res;
-    }
 }
 
 /++ Serial Port Fiber Ready
  +/
-class SerialPortFR : SerialPortNonBlk
+class SerialPortFR : SerialPortTm
 {
 protected:
 
@@ -200,7 +131,7 @@ public:
         Params:
             arr = buffer for reading
             timeout = timeout for first byte recive
-            frameGap = detect new data frame (return current) by silence period
+            frameGap = detect new data frame by silence period
 
         Returns: slice of arr
 
@@ -213,6 +144,17 @@ public:
     void[] readLoop(void[] arr, Duration timeout=1.seconds,
                                 Duration frameGap=50.msecs)
     {
+        readTimeout = timeout;
+        this.frameGap = frameGap;
+        return read(arr);
+    }
+
+    /++
+     +/
+    alias frameGap = readTimeoutMult;
+
+    override void[] read(void[] arr)
+    {
         if (closed) throw new PortClosedException(port);
 
         ptrdiff_t readed;
@@ -221,21 +163,27 @@ public:
 
         StopWatch silence, full;
 
+        version (readAvailable)
+            const timeout = readTimeout;
+
+        version (readAllOrThrow)
+            const timeout = arr.length * readTimeoutMult + readTimeout;
+
         full.start();
         while (true)
         {
-            // TODO: maybe return readed data?
-            enforce(readed <= arr.length,
-                    new SerialPortException("read more what can"));
-
-            const res = this.read(arr[readed..$]).length;
+            const res = super.read(arr[readed..$]).length;
 
             readed += res;
 
+            // buffer filled anyway
+            if (readed == arr.length) return arr[];
+
             if (res == 0)
             {
-                if (readed > 0 && silence.peek > frameGap)
-                    return arr[0..readed];
+                version (readAvailable)
+                    if (readed > 0 && silence.peek > frameGap)
+                        return arr[0..readed];
 
                 if (!silence.running) silence.start();
             }
@@ -245,7 +193,10 @@ public:
                 silence.reset();
             }
 
-            if (readed == 0 && full.peek > timeout)
+            version (readAvailable) const readFailed = readed == 0;
+            version (readAllOrThrow) const readFailed = readed != arr.length;
+
+            if (readFailed && full.peek > timeout)
                 throw new TimeoutException(port);
 
             this.sleep(pause);
@@ -253,6 +204,8 @@ public:
     }
 
     /++ Write all data by parts
+
+        call sleep between parts
 
         Params:
             arr = data for writing
@@ -265,14 +218,34 @@ public:
 
         See_Also: SerialPort.write
      +/
+    deprecated("use write instead")
     void writeLoop(const(void[]) arr, Duration timeout=10.msecs)
+    {
+        writeTimeout = timeout;
+        this.write(arr);
+    }
+
+    /++ Write all data by parts
+
+        Params:
+            arr = data for writing
+
+        Throws:
+            PortClosedException
+            WriteException
+            TimeoutException if full write time is out
+
+        See_Also: SerialPort.write
+     +/
+    override ssize_t write(const(void[]) arr)
     {
         if (closed) throw new PortClosedException(port);
 
-        size_t written = this.write(arr);
-        if (written == arr.length) return;
+        size_t written = super.write(arr);
+        if (written == arr.length) return written;
 
-        auto pause = ioPause();
+        const timeout = arr.length * writeTimeoutMult + writeTimeout;
+        const pause = ioPause();
         const full = StopWatch(AutoStart.yes);
 
         while (written < arr.length)
@@ -280,8 +253,10 @@ public:
             if (full.peek > timeout)
                 throw new TimeoutException(port);
 
-            written += this.write(arr[written..$]);
+            written += super.write(arr[written..$]);
             if (written < arr.length) this.sleep(pause);
         }
+
+        return written;
     }
 }

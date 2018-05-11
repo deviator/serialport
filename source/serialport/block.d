@@ -4,7 +4,7 @@ module serialport.block;
 import serialport.base;
 
 ///
-class SerialPortBlk : SerialPort
+class SerialPortBlk : SerialPortTm
 {
 public:
     /++ Construct SerialPortBlk
@@ -26,49 +26,6 @@ public:
     /// ditto
     this(string port, Config conf) { super(port, conf); }
 
-    @property
-    {
-        const
-        {
-            ///
-            Duration readTimeout() { return _readTimeout; }
-            ///
-            Duration readTimeoutMult() { return _readTimeoutMult; }
-            ///
-            Duration writeTimeout() { return _writeTimeout; }
-            ///
-            Duration writeTimeoutMult() { return _writeTimeoutMult; }
-        }
-
-        ///
-        void readTimeout(Duration tm)
-        {
-            _readTimeout = tm;
-            version (Windows) updTimeouts();
-        }
-
-        ///
-        void readTimeoutMult(Duration tm)
-        {
-            _readTimeoutMult = tm;
-            version (Windows) updTimeouts();
-        }
-
-        ///
-        void writeTimeout(Duration tm)
-        {
-            _writeTimeout = tm;
-            version (Windows) updTimeouts();
-        }
-
-        ///
-        void writeTimeoutMult(Duration tm)
-        {
-            _writeTimeout = tm;
-            version (Windows) updTimeouts();
-        }
-    }
-
     override void[] read(void[] buf)
     {
         if (closed) throw new PortClosedException(port);
@@ -89,12 +46,14 @@ public:
             const rv = select(_handle + 1, &sset, null, null, &ctm);
             if (rv == -1)
                 throw new SysCallException("select", errno);
-            else if (rv == 0)
-                throw new TimeoutException(port);
-
-            const res = posixRead(handle, buf.ptr, buf.length);
-            if (res < 0)
-                throw new ReadException(port, text("errno ", errno));
+            
+            ssize_t res = 0;
+            if (rv)
+            {
+                res = posixRead(handle, buf.ptr, buf.length);
+                if (res < 0)
+                    throw new ReadException(port, text("errno ", errno));
+            }
         }
         else
         {
@@ -102,10 +61,12 @@ public:
 
             if (!ReadFile(handle, buf.ptr, cast(uint)buf.length, &res, null))
                 throw new ReadException(port, text("error ", GetLastError()));
-
-            if (res == 0)
-                throw new TimeoutException(port);
         }
+
+        version (readAvailable) const timeIsOut = res == 0;
+        version (readAllOrThrow) const timeIsOut = res != buf.length;
+
+        if (timeIsOut) throw new TimeoutException(port);
 
         return buf[0..res];
     }
@@ -148,11 +109,7 @@ public:
 
 protected:
 
-    Duration _writeTimeout = 1.seconds,
-             _writeTimeoutMult = Duration.zero,
-             _readTimeout = 1.seconds,
-             _readTimeoutMult = Duration.zero
-             ;
+    override void updateTimeouts() { version (Windows) updTimeouts(); }
 
     version (Windows)
     {

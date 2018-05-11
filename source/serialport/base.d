@@ -17,7 +17,7 @@ package import serialport.types;
 package import serialport.util;
 
 ///
-abstract class SerialPort
+class SerialPort
 {
 protected:
     ///
@@ -345,7 +345,43 @@ public:
             PortClosedException if port closed
             ReadException if read error occurs
      +/
-    abstract void[] read(void[] buf);
+    void[] read(void[] buf)
+    {
+        // non-blocking algorithm
+        if (closed) throw new PortClosedException(port);
+
+        auto ptr = buf.ptr;
+        auto len = buf.length;
+
+        size_t res;
+
+        version (Posix)
+        {
+            auto sres = posixRead(_handle, ptr, len);
+
+            // no bytes for read, it's ok
+            if (sres < 0)
+            {
+                if (errno == EAGAIN) sres = 0;
+                else throw new ReadException(port, text("errno ", errno));
+            }
+            res = sres;
+        }
+        version (Windows)
+        {
+            uint sres;
+            auto rfr = ReadFile(_handle, ptr, cast(uint)len, &sres, null);
+            if (!rfr)
+            {
+                auto err = GetLastError();
+                if (err == ERROR_IO_PENDING) { /+ buffer empty +/ }
+                else throw new ReadException(port, text("error ", err));
+            }
+            res = sres;
+        }
+
+        return buf[0..res];
+    }
 
     /++ Write data to port
 
@@ -358,7 +394,39 @@ public:
             PortClosedException if port closed
             WriteException if read error occurs
      +/
-    abstract ptrdiff_t write(const(void[]) arr);
+    ptrdiff_t write(const(void[]) arr)
+    {
+        // non-blocking algorithm
+        if (closed) throw new PortClosedException(port);
+
+        ptrdiff_t res;
+        auto ptr = arr.ptr;
+        auto len = arr.length;
+
+        version (Posix)
+        {
+            res = posixWrite(_handle, ptr, len);
+            if (res < 0)
+            {
+                if (errno == EAGAIN) res = 0; // buffer filled
+                else throw new WriteException(port, text("errno ", errno));
+            }
+        }
+        version (Windows)
+        {
+            uint sres;
+            auto wfr = WriteFile(_handle, ptr, cast(uint)len, &sres, null);
+            if (!wfr)
+            {
+                auto err = GetLastError();
+                if (err == ERROR_IO_PENDING) { /+ buffer filled +/ }
+                else throw new WriteException(port, text("error ", err));
+            }
+            res = sres;
+        }
+
+        return res;
+    }
 
 protected:
 
@@ -527,6 +595,84 @@ protected:
 
             if (SetCommTimeouts(_handle, &tm) == 0)
                 throw new SysCallException("SetCommTimeouts", GetLastError());
+        }
+    }
+}
+
+///
+abstract class SerialPortTm : SerialPort
+{
+protected:
+
+    Duration _writeTimeout = 1.seconds,
+             _writeTimeoutMult = Duration.zero,
+             _readTimeout = 1.seconds,
+             _readTimeoutMult = Duration.zero;
+
+
+    void updateTimeouts() {}
+    
+public:
+
+    /++ Construct SerialPortTm
+
+        See_Also: SerialPort.this
+     +/
+    this(string exmode) { super(exmode); }
+
+    /// ditto
+    this(string port, string mode) { super(port, mode); }
+
+    /// ditto
+    this(string port, uint baudRate) { super(port, baudRate); }
+
+    /// ditto
+    this(string port, uint baudRate, string mode)
+    { super(port, baudRate, mode); }
+
+    /// ditto
+    this(string port, Config conf) { super(port, conf); }
+
+    @property
+    {
+        const
+        {
+            ///
+            Duration readTimeout() { return _readTimeout; }
+            ///
+            Duration readTimeoutMult() { return _readTimeoutMult; }
+            ///
+            Duration writeTimeout() { return _writeTimeout; }
+            ///
+            Duration writeTimeoutMult() { return _writeTimeoutMult; }
+        }
+
+        ///
+        void readTimeout(Duration tm)
+        {
+            _readTimeout = tm;
+            updateTimeouts();
+        }
+
+        ///
+        void readTimeoutMult(Duration tm)
+        {
+            _readTimeoutMult = tm;
+            updateTimeouts();
+        }
+
+        ///
+        void writeTimeout(Duration tm)
+        {
+            _writeTimeout = tm;
+            updateTimeouts();
+        }
+
+        ///
+        void writeTimeoutMult(Duration tm)
+        {
+            _writeTimeout = tm;
+            updateTimeouts();
         }
     }
 }
