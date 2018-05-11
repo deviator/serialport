@@ -24,6 +24,7 @@ d:
   - dmd-2.078.3
 
 script: 
+  - dub test --compiler=${DC} --build=unittest-cov --config=readAllOrThrow
   - dub test --compiler=${DC} --build=unittest-cov
 
 after_success:

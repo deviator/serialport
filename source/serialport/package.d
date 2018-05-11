@@ -132,8 +132,11 @@ unittest
     reopen();
     utCall!(threadTest!SerialPort)("thread test for non-block", cp.ports);
 
-    reopen();
-    utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);
+    version (readAvailable)
+    {
+        reopen();
+        utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);
+    }
 
     reopen();
     utCall!fiberTest("fiber test", cp.ports);
@@ -143,6 +146,12 @@ unittest
 
     reopen();
     utCall!readTimeoutTest("read timeout test", cp.ports);
+
+    reopen();
+    utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready and current config", cp.ports);
+
+    reopen();
+    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading and current config", cp.ports);
 }
 
 auto utCall(alias fnc, Args...)(string fname, Args args)
@@ -427,9 +436,43 @@ void readTimeoutTest(string[2] ports)
 
     auto comA = new SerialPortFR(ports[0], 19200);
     void[1024] buffer = void;
-    assertThrown!TimeoutException(comA.readLoop(buffer[], 1.msecs, 1.msecs));
+    assertThrown!TimeoutException(comA.readAll(buffer[], 1.msecs, 1.msecs));
 
     auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
     comB.readTimeout = 1.msecs;
     assertThrown!TimeoutException(comB.read(buffer[]));
+}
+
+void readTimeoutTestConfig(SP : SerialPortTm)(string[2] ports)
+{
+    enum mode = "9600:8N1";
+
+    enum FULL = 100;
+    enum SEND = 10;
+
+    static void thfunc(string port)
+    {
+        auto com = new SP(port, mode);
+        scope (exit) com.close();
+        enum data = "helloworld";
+        static assert(data.length == SEND);
+        com.write(data);
+    }
+
+    auto com = new SP(ports[0], mode);
+        com.readTimeout = 50.msecs;
+    scope (exit) com.close();
+
+    void[FULL] buffer = void;
+    void[] data;
+
+    auto t = spawn(&thfunc, ports[1]);
+
+    version (readAvailable)
+    {
+        assertNotThrown(data = com.read(buffer));
+        assert(data.length == SEND);
+    }
+    version (readAllOrThrow)
+        assertThrown!TimeoutException(data = com.read(buffer));
 }
