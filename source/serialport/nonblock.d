@@ -237,7 +237,7 @@ public:
 
         See_Also: SerialPort.write
      +/
-    override ssize_t write(const(void[]) arr)
+    override ptrdiff_t write(const(void[]) arr)
     {
         if (closed) throw new PortClosedException(port);
 
