@@ -633,6 +633,24 @@ public:
     /// ditto
     this(string port, Config conf) { super(port, conf); }
 
+    ///
+    void flush()
+    {
+        void[128] buf = void;
+        auto rt = _readTimeout;
+        auto rtm = _readTimeoutMult;
+
+        _readTimeout = 10.msecs;
+        _readTimeoutMult = Duration.zero;
+        updateTimeouts();
+
+        try while(true) read(buf); catch (TimeoutException e) {}
+
+        _readTimeout = rt;
+        _readTimeoutMult = rtm;
+        updateTimeouts();
+    }
+
     @property
     {
         const
