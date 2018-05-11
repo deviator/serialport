@@ -94,22 +94,23 @@ It reads in loop from serial port while silent time is less what `frameGap` and
 throws `TimeoutException` only if timeout is expires and no data was readed.
 
 ```
----|-------|---|--------------|-----|------------> t
-   |       |   |              |     |
- read      |   |              |     |
-   |       |   |              |     |
-   |       |<---------data receive---------->|
-   |       |====   === === ===|     |   |== =|
-   |       |   |   |          |     |
-   |<-timeout->|   |          |     |
-   |      >|---|< if readedData.length > 0 then continue reading, else
-   |       |   |   |        throw TimeoutException
-   |       |   |   |          |     |
-   |       |  >|---|< first silent, if < frameGap then continue reading
-   |       |                  |     |
-   |       |                 >|-----|< this silent > frameGap, stop
-   |       |                  |          reading and return readedData
-   |       |<---readedData--->|
+---|-----|---|--------------|-----|------------> t
+   |     |   |              |     |
+ read    |   |              |     |
+   |     |   |              |     |
+   |     |<---------data receive---------->|
+   |     |=== =====   ======|     |   |== =|
+   |     |     |  |   |     |     |
+   |<-timeout->|  |   |     |     |
+   |     |<-1->|  |<2>|     |<-3->|
+   |     |                  |          
+   |     |<---readedData--->|
+
+(1) if readedData.length > 0 then continue reading
+    else throw TimeoutException
+(2) silent time, if silent < frameGap then continue reading
+(3) else if silent > frameGap then stop reading
+    and return readedData
 ```
 
 It's useful if you don't know how much data can come:
