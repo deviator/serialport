@@ -4,29 +4,7 @@ module serialport.nonblock;
 import serialport.base;
 
 ///
-deprecated("use SerialPort instead")
-class SerialPortNonBlk : SerialPort
-{
-public:
-    /++ Construct SerialPortNonBlk
-
-        See_Also: SerialPort.this
-     +/
-    this(string exmode) { super(exmode); }
-
-    /// ditto
-    this(string port, string mode) { super(port, mode); }
-
-    /// ditto
-    this(string port, uint baudRate) { super(port, baudRate); }
-
-    /// ditto
-    this(string port, uint baudRate, string mode)
-    { super(port, baudRate, mode); }
-
-    /// ditto
-    this(string port, Config conf) { super(port, conf); }
-}
+alias SerialPortNonBlk = SerialPort;
 
 /++ Serial Port Fiber Ready
  +/
@@ -61,9 +39,15 @@ protected:
      +/
     Duration ioPause()
     {
-        // approx theoretical time for receive or send
-        // one byte (8 bit + 1 start bit + 1 stop bit)
-        return (cast(ulong)(10.0f / config.baudRate * 1e6)).usecs;
+        auto cfg = config;
+        auto cnt = 1 + // start bit
+                   cast(int)cfg.dataBits +
+                   (cfg.parity == Parity.none ? 0 : 1) +
+                   (cfg.stopBits == StopBits.one ? 1 :
+                    cfg.stopBits == StopBits.onePointFive ? 1.5 : 2) +
+                    1.5 // reserve
+                    ;
+        return (cast(ulong)(cnt / cfg.baudRate * 1e6) + 100/+reserve+/).usecs;
     }
 
 public:
@@ -124,7 +108,54 @@ public:
         super(port, conf);
     }
 
-    /++ Read data by parts, sleep between checks.
+    override void[] read(void[] buf)
+    {
+        if (closed) throw new PortClosedException(port);
+
+        size_t readed;
+        const timeout = buf.length * writeTimeoutMult + writeTimeout;
+        const pause = ioPause();
+        const sw = StopWatch(AutoStart.yes);
+        while (sw.peek < timeout)
+        {
+            readed += super.read(buf[readed..$]).length;
+            if (readed == buf.length) return buf[];
+            this.sleep(pause);
+        }
+
+        version (readAllOrThrow)
+            throw new TimeoutException(port);
+        else version (readAvailable)
+        {
+            if (readed == 0)
+                throw new TimeoutException(port);
+            else return buf[0..readed];
+        }
+    }
+
+    override ptrdiff_t write(const(void[]) arr)
+    {
+        if (closed) throw new PortClosedException(port);
+
+        size_t written;
+        const timeout = arr.length * writeTimeoutMult + writeTimeout;
+        const pause = ioPause();
+        const sw = StopWatch(AutoStart.yes);
+        while (sw.peek < timeout)
+        {
+            written += super.write(arr[written..$]);
+            if (written == arr.length) return written;
+            this.sleep(pause);
+        }
+
+        throw new TimeoutException(port);
+    }
+
+    ///
+    deprecated("use readAll instead")
+    alias readLoop = readAll;
+
+    /++ Read data while available by parts, sleep between checks.
 
         Sleep time calculates from baud rate and count of bits in one byte.
 
@@ -141,19 +172,8 @@ public:
 
         See_Also: SerialPort.read
      +/
-    void[] readLoop(void[] arr, Duration timeout=1.seconds,
-                                Duration frameGap=50.msecs)
-    {
-        readTimeout = timeout;
-        this.frameGap = frameGap;
-        return read(arr);
-    }
-
-    /++
-     +/
-    alias frameGap = readTimeoutMult;
-
-    override void[] read(void[] arr)
+    void[] readAll(void[] arr, Duration timeout=1.seconds,
+                               Duration frameGap=50.msecs)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -163,12 +183,6 @@ public:
 
         StopWatch silence, full;
 
-        version (readAvailable)
-            const timeout = readTimeout;
-
-        version (readAllOrThrow)
-            const timeout = arr.length * readTimeoutMult + readTimeout;
-
         full.start();
         while (true)
         {
@@ -176,14 +190,13 @@ public:
 
             readed += res;
 
-            // buffer filled anyway
+            // buffer filled
             if (readed == arr.length) return arr[];
 
             if (res == 0)
             {
-                version (readAvailable)
-                    if (readed > 0 && silence.peek > frameGap)
-                        return arr[0..readed];
+                if (readed > 0 && silence.peek > frameGap)
+                    return arr[0..readed];
 
                 if (!silence.running) silence.start();
             }
@@ -193,10 +206,7 @@ public:
                 silence.reset();
             }
 
-            version (readAvailable) const readFailed = readed == 0;
-            version (readAllOrThrow) const readFailed = readed != arr.length;
-
-            if (readFailed && full.peek > timeout)
+            if (readed == 0 && full.peek > timeout)
                 throw new TimeoutException(port);
 
             this.sleep(pause);
@@ -223,40 +233,5 @@ public:
     {
         writeTimeout = timeout;
         this.write(arr);
-    }
-
-    /++ Write all data by parts
-
-        Params:
-            arr = data for writing
-
-        Throws:
-            PortClosedException
-            WriteException
-            TimeoutException if full write time is out
-
-        See_Also: SerialPort.write
-     +/
-    override ptrdiff_t write(const(void[]) arr)
-    {
-        if (closed) throw new PortClosedException(port);
-
-        size_t written = super.write(arr);
-        if (written == arr.length) return written;
-
-        const timeout = arr.length * writeTimeoutMult + writeTimeout;
-        const pause = ioPause();
-        const full = StopWatch(AutoStart.yes);
-
-        while (written < arr.length)
-        {
-            if (full.peek > timeout)
-                throw new TimeoutException(port);
-
-            written += super.write(arr[written..$]);
-            if (written < arr.length) this.sleep(pause);
-        }
-
-        return written;
     }
 }
