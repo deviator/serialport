@@ -444,7 +444,7 @@ void fiberTest(string[2] ports)
                 import std.algorithm : equal;
                 enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
                 work = false;
-                writeln("basic loop steps: ", step);
+                stderr.writeln("basic loop steps: ", step);
             }
             else throw new Exception(text(slave.result, " != ", master.data));
         }
@@ -470,10 +470,11 @@ void fiberTest2(string[2] ports)
 
     scom.readTimeout = 1000.msecs;
     version (OSX)
-        mcom.writeTimeout = 500.msecs;
+        mcom.writeTimeout = 1000.msecs;
     else
         mcom.writeTimeout = 50.msecs;
 
+    stderr.writeln(mcom.writeTimeout);
     enum BK = 4;
 
     auto slave  = new CFSlave(scom,  BUFFER_SIZE * BK);
@@ -495,7 +496,7 @@ void fiberTest2(string[2] ports)
                 import std.algorithm : equal;
                 enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
                 work = false;
-                writeln("basic loop steps: ", step);
+                stderr.writeln("basic loop steps: ", step);
             }
         }
     }
