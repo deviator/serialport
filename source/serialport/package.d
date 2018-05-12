@@ -468,7 +468,10 @@ void fiberTest2(string[2] ports)
     mcom.flush();
 
     scom.readTimeout = 1000.msecs;
-    mcom.writeTimeout = 100.msecs;
+    version (OSX)
+        mcom.writeTimeout = 500.msecs;
+    else
+        mcom.writeTimeout = 50.msecs;
 
     enum BK = 4;
 
