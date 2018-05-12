@@ -53,6 +53,8 @@ behavior can be different. See [library configuration](#library-configurations).
 
 ## Library configurations
 
+Transmition time schema:
+
 ```
 ---|-------|--------------|-------|--> t
    |       |              |       |
@@ -76,6 +78,7 @@ if (readedData.length == 0)
 ```
 
 ### `readAllOrThrow`
+
 ```d
 if (readedData.length < dataBuffer.length)
     throw TimeoutException(port);
@@ -94,16 +97,16 @@ It reads in loop from serial port while silent time is less what `frameGap` and
 throws `TimeoutException` only if timeout is expires and no data was readed.
 
 ```
----|-----|---|--------------|-----|------------> t
-   |     |   |              |     |
- read    |   |              |     |
-   |     |   |              |     |
+---|-----|-----|------------|-----|------------> t
+   |     |     |            |     |
+ read    |     |            |     |
+   |     |     |            |     |
    |     |<---------data receive---------->|
    |     |=== =====   ======|     |   |== =|
    |     |     |  |   |     |     |
    |<-timeout->|  |   |     |     |
    |     |<-1->|  |<2>|     |<-3->|
-   |     |                  |          
+   |     |                  |
    |     |<---readedData--->|
 
 (1) if readedData.length > 0 then continue reading
@@ -133,7 +136,13 @@ or `Thread.yield` otherwise. If you want redefine this behavior, you can set
 
 ## Tests
 
-For linux and OSX tested
+### Real hardware
+
+Two paired USB->UART (FTDI FT232RL) uses for tests on linux and windows;
+
+### CI
+
+For linux and OSX tested (socat as tty pipe creator)
 
 * ldc
 * ldc-beta
@@ -143,7 +152,7 @@ For linux and OSX tested
 * dmd-2.079.1
 * dmd-2.078.3
 
-For windows tested fox x86 and x64
+For windows tested (build only, see [note](#note)) fox x86 and x64
 
 * dmd beta
 * dmd stable
@@ -154,8 +163,6 @@ See [.travis.yml](.travis.yml) [.appveyor.yml](.appveyor.yml)
 
 ### NOTE
 
-1. Windows not full tested (not real test with virtual com ports) by CI
+1. Windows not full tested by CI (no real test with virtual com ports)
     because I did not configure to adjust the work com0com program 
     https://help.appveyor.com/discussions/questions/427-how-can-i-use-com0com 
-
-2. OSX has strange limitation see [first](source/serialport/package.d#L200), [second](source/serialport/package.d#L367)
