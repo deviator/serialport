@@ -4,6 +4,7 @@ module serialport.nonblock;
 import serialport.base;
 
 ///
+deprecated("use 'SerialPort' instead")
 alias SerialPortNonBlk = SerialPort;
 
 /++ Serial Port Fiber Ready
@@ -152,7 +153,7 @@ public:
     }
 
     ///
-    deprecated("use readAll instead")
+    deprecated("use 'readAll' instead")
     alias readLoop = readAll;
 
     /++ Read data while available by parts, sleep between checks.
@@ -228,7 +229,7 @@ public:
 
         See_Also: SerialPort.write
      +/
-    deprecated("use write instead")
+    deprecated("use 'write' instead")
     void writeLoop(const(void[]) arr, Duration timeout=10.msecs)
     {
         writeTimeout = timeout;
