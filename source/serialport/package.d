@@ -133,8 +133,7 @@ unittest
 
 ComPipe getPlatformComPipe(int bufsz)
 {
-    import std.stdio : stderr;
-    stderr.writeln("available ports: ", SerialPort.listAvailable);
+    stderr.writeln("available ports count: ", SerialPort.listAvailable.length);
 
     try
     {
@@ -162,20 +161,21 @@ ComPipe getPlatformComPipe(int bufsz)
 unittest
 {
     stderr.writeln("=== start real test ===\n");
-    scope (exit) stderr.writeln("\n=== finish real test ===");
+    scope (success) stderr.writeln("\n=== finish real test ===");
+    scope (failure) stderr.writeln("\n!!!  fail real test  !!!");
     auto cp = getPlatformComPipe(BUFFER_SIZE);
     if (cp is null)
     {
         stderr.writeln("platform doesn't support");
         return;
     }
+
+    stderr.writefln("port source `%s`", cp.command);
     void reopen()
     {
         cp.close();
-        stderr.writeln("\n");
-        Thread.sleep(250.msecs);
+        Thread.sleep(50.msecs);
         cp.open();
-        stderr.writefln("run command `%s`", cp.command);
         stderr.writefln("pipe ports: %s <=> %s", cp.ports[0], cp.ports[1]);
     }
 
@@ -205,11 +205,11 @@ unittest
     utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading and current config", cp.ports);
 }
 
-auto utCall(alias fnc, Args...)(string fname, Args args)
+auto utCall(alias fnc, Args...)(string name, Args args)
 {
-    stderr.writefln("--- run %s ---", fname);
-    scope (success) stderr.writefln("--- success %s ---", fname);
-    scope (failure) stderr.writefln("!!! failure %s !!!", fname);
+    stderr.writefln("--- run %s ---", name);
+    scope (success) stderr.writefln("--- success %s ---", name);
+    scope (failure) stderr.writefln("!!! failure %s !!!", name);
     return fnc(args);
 }
 
@@ -320,8 +320,9 @@ void threadTest(SPT)(string[2] ports)
         SPConfig.parse("19200:8N2"),
     ];
 
-    com.config = SPConfig(38400);
-    send(t, com.config);
+    auto cfg = SPConfig(38400);
+    com.config = cfg;
+    send(t, cfg);
 
     Thread.sleep(1000.msecs);
 
@@ -394,9 +395,9 @@ class CFSlave : CF
 
     override void run()
     {
-        stderr.writeln("start readLoop");
-        result = com.readLoop(data, readTimeout, readGapTimeout);
-        stderr.writeln("finish readLoop");
+        stderr.writeln("start read loop");
+        result = com.readAll(data, readTimeout, readGapTimeout);
+        stderr.writeln("finish read loop");
     }
 }
 
@@ -415,9 +416,10 @@ class CFMaster : CF
 
     override void run()
     {
-        stderr.writeln("start writeLoop");
-        com.writeLoop(data, writeTimeout);
-        stderr.writeln("finish writeLoop");
+        stderr.writeln("start write loop");
+        com.writeTimeout = writeTimeout;
+        com.write(data);
+        stderr.writeln("finish write loop");
     }
 }
 
@@ -466,7 +468,7 @@ void fiberTest2(string[2] ports)
     mcom.flush();
 
     scom.readTimeout = 1000.msecs;
-    mcom.writeTimeout = 10.msecs;
+    mcom.writeTimeout = 100.msecs;
 
     enum BK = 4;
 
