@@ -469,16 +469,15 @@ void fiberTest2(string[2] ports)
     mcom.flush();
 
     scom.readTimeout = 1000.msecs;
+    mcom.writeTimeout = 100.msecs;
+
     version (OSX)
-        mcom.writeTimeout = 5000.msecs;
+        enum BS = BUFFER_SIZE / 2;
     else
-        mcom.writeTimeout = 50.msecs;
+        enum BS = BUFFER_SIZE * 4;
 
-    stderr.writeln(mcom.writeTimeout);
-    enum BK = 4;
-
-    auto slave  = new CFSlave(scom,  BUFFER_SIZE * BK);
-    auto master = new CFMaster(mcom, BUFFER_SIZE * BK);
+    auto slave  = new CFSlave(scom,  BS);
+    auto master = new CFMaster(mcom, BS);
 
     void run()
     {
@@ -507,16 +506,17 @@ void fiberTest2(string[2] ports)
 void readTimeoutTest(string[2] ports)
 {
     string mode = "19200:8N1";
+    void[1024] buffer = void;
 
     auto comA = new SerialPortFR(ports[0], 19200);
     scope (exit) comA.close();
-    void[1024] buffer = void;
-    try while (true) comA.read(buffer); catch (TimeoutException) {} // flush
+    comA.flush();
     assertThrown!TimeoutException(comA.readAll(buffer[], 1.msecs, 1.msecs));
+    assertThrown!TimeoutException(comA.read(buffer[]));
 
     auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
     scope (exit) comB.close();
-    try while (true) comB.read(buffer); catch (TimeoutException) {} // flush
+    comB.flush();
     comB.readTimeout = 1.msecs;
     assertThrown!TimeoutException(comB.read(buffer[]));
 }
