@@ -470,7 +470,7 @@ void fiberTest2(string[2] ports)
 
     scom.readTimeout = 1000.msecs;
     version (OSX)
-        mcom.writeTimeout = 1000.msecs;
+        mcom.writeTimeout = 5000.msecs;
     else
         mcom.writeTimeout = 50.msecs;
 
