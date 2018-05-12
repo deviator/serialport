@@ -423,7 +423,9 @@ class CFMaster : CF
 void fiberTest(string[2] ports)
 {
     auto slave = new CFSlave(new SerialPortFR(ports[0]), BUFFER_SIZE);
+    scope (exit) slave.com.close();
     auto master = new CFMaster(new SerialPortFR(ports[1]), BUFFER_SIZE);
+    scope (exit) master.com.close();
 
     bool work = true;
     int step;
@@ -455,6 +457,8 @@ void fiberTest2(string[2] ports)
 
     auto scom = new SerialPortFR(ports[0], 9600, "8N1");
     auto mcom = new SerialPortFR(ports[1], "19200:8N1");
+    scope (exit) scom.close();
+    scope (exit) mcom.close();
 
     version (Posix)
         assertThrown!UnsupportedException(scom.baudRate = 9200);
