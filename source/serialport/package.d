@@ -537,7 +537,7 @@ void readTimeoutTestConfig(SP : SerialPortTm)(string[2] ports)
 
     auto com = new SP(ports[0], mode);
     scope (exit) com.close();
-    auto rt = 100.msecs;
+    auto rt = 300.msecs;
     com.readTimeout = rt;
     com.flush();
     assert(com.readTimeout == rt);
