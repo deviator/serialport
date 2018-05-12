@@ -340,7 +340,6 @@ void threadTest(SPT)(string[2] ports)
 
                 if (list.empty)
                 {
-                    work = false;
                     stderr.writeln("owner send data finish");
                     send(t, false);
                 }
@@ -356,14 +355,12 @@ void threadTest(SPT)(string[2] ports)
             (ExcStruct e) { throw new Exception("%s:%s".format(e.type, e.msg)); },
             (LinkTerminated e)
             {
-                stderr.writeln("link terminated");
                 work = false;
-                stderr.writeln(e.tid, " ", t);
+                stderr.writefln("link terminated for %s, child tid %s", e.tid, t);
                 //assert(e.tid == t);
             }
         );
     }
-    send(t, false);
 }
 
 class CF : Fiber
