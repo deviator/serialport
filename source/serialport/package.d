@@ -508,11 +508,13 @@ void readTimeoutTest(string[2] ports)
     string mode = "19200:8N1";
 
     auto comA = new SerialPortFR(ports[0], 19200);
+    scope (exit) comA.close();
     void[1024] buffer = void;
     try while (true) comA.read(buffer); catch (TimeoutException) {} // flush
     assertThrown!TimeoutException(comA.readAll(buffer[], 1.msecs, 1.msecs));
 
     auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
+    scope (exit) comB.close();
     try while (true) comB.read(buffer); catch (TimeoutException) {} // flush
     comB.readTimeout = 1.msecs;
     assertThrown!TimeoutException(comB.read(buffer[]));
