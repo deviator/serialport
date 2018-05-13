@@ -4,7 +4,7 @@ module serialport.block;
 import serialport.base;
 
 /// Blocking work serialport
-class SerialPortBlk : SerialPortTm
+class SerialPortBlk : SerialPort
 {
 public:
     /++ Construct SerialPortBlk
@@ -26,7 +26,7 @@ public:
     /// ditto
     this(string port, Config conf) { super(port, conf); }
 
-    override void[] read(void[] buf)
+    override void[] read(void[] buf, bool returnAvailable=false)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -63,15 +63,17 @@ public:
                 throw new ReadException(port, text("error ", GetLastError()));
         }
 
-        version (readAvailable) const timeIsOut = res == 0;
-        version (readAllOrThrow) const timeIsOut = res != buf.length;
+        bool timeIsOut;
+
+        if (returnAvailable) timeIsOut = res == 0;
+        else timeIsOut = res != buf.length;
 
         if (timeIsOut) throw new TimeoutException(port);
 
         return buf[0..res];
     }
 
-    override ptrdiff_t write(const(void[]) arr)
+    override void write(const(void[]) arr)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -103,11 +105,14 @@ public:
             if (arr.length != written)
                 throw new TimeoutException(port);
         }
-
-        return written;
     }
 
 protected:
+
+    override void[] m_read(void[])
+    { assert(0, "disable m_read for blocking"); }
+    override size_t m_write(const(void)[])
+    { assert(0, "disable m_write for blocking"); }
 
     override void updateTimeouts() { version (Windows) updTimeouts(); }
 

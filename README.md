@@ -32,28 +32,48 @@ auto res1 = com.read(bufferForReading);
 
 See also example: [monitor](example/monitor).
 
-Class `SerialPort` provides non-blocking `read` (immediatlly return
-data in system serial port buffer) and `write` (return writed bytes
-count at the first onset).
+## Class hierarchy
+
+```
+         abstract
+      SerialPortBase
+        ^        ^
+        |        |
+        |   SerialPortNonBlk
+        |
+    abstract
+   SerialPort
+     ^     ^
+     |     |
+     |  SerialPortFR
+     |
+SerialPortBlk
+```
+
+Class `SerialPortBase` provides work with settings (baudrate, stop bits etc).
+
+Class `SerialPortNonBlk` provides non-blocking `void[] read(void[] buf)`
+(immediatlly return data in system serial port buffer) and
+`size_t write(const(void[]))` (return writed bytes count at the first onset).
+
+Class `SerialPort` provides `void[] read(void[] buf, bool returnAvailable=false)`,
+`void write(const(void[]))` and timeouts properties.
 
 Class `SerialPortBlk` provides blocking `read` and `write`.
 
 If you want use library in fibers it provides `SerialPortFR` (Fiber Ready),
-where `read` and `write` is loops with calling sleep function. Loops algorithms
-use `Fiber.yield` if available, or `Thread.yield` as failback. If you want
-redefine this behavior, you can set `void delegate(Duration) sleepFunc` field
-directly or through last parameter of ctor.
+where `read` and `write` is loops: call non-blocking read and write and
+sleep between tries. Loops algorithms use `Fiber.yield` if available,
+or `Thread.yield` as failback. If you want redefine this behavior, you
+can set `void delegate(Duration) sleepFunc` field directly or through
+last parameter of ctor.
 
-`write` method of `SerialPortBlk` and `SerialPortFR` can throw `TimeoutException`
-if it can't finish write all data to serial port during
+`write` method of `SerialPort` can throw `TimeoutException` if it can't
+finish write all data to serial port during
 `timeout = writeTimeout + writeTimeoutMult * data.length`.
 
-`read` method in `SerialPortBlk` and `SerialPortFR` can throw `TimeoutException`.
-
-Also, `read` method of thouse can throw `TimeoutException`, but here the
-behavior can be different. See [library configuration](#library-configurations).
-
-## Library configurations
+`read` method of `SerialPort` also can throw `TimeoutException`,
+but here the behavior can be different depending on the flag `returnAvailable`.
 
 Receive data time schema:
 
@@ -73,28 +93,24 @@ Receive data time schema:
 
 where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
 
-### `readAvailable` (default configuration)
+if `returnAvailable` is true
 
 ```d
 if (readedData.length == 0)
     throw TimeoutException(port);
+else return readedData;
 ```
 
-### `readAllOrThrow`
+if `returnAvailable` is false
 
 ```d
 if (readedData.length < dataBuffer.length)
     throw TimeoutException(port);
 ```
 
-For using this configuration set in your `dub.sdl`
-`subConfiguration "serialport" "readAllOrThrow"`
+## `SerialPortFR.readContinues` method
 
-## `SerialPortFR.readAll` method
-
-Undepend of configuration `SerialPortFR` has `readAll` method
-
-    void[] readAll(void[] arr, Duration timeout=1.seconds, Duration frameGap=50.msecs)
+    void[] readContinues(void[] arr, Duration startTimeout=1.seconds, Duration frameGap=50.msecs)
 
 It reads in loop from serial port while silent time is less what `frameGap` and
 throws `TimeoutException` only if timeout is expires and no data was readed.

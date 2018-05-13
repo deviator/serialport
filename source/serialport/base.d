@@ -16,9 +16,9 @@ package import serialport.exception;
 package import serialport.types;
 package import serialport.util;
 
-/++ Non-blocking work with serial port
+/++
  +/
-class SerialPort
+abstract class SerialPortBase
 {
 protected:
     /// 
@@ -130,8 +130,7 @@ public:
                     Parity -> parity
             val = value
      +/
-    SerialPort set(T)(T val)
-        if (is(typeof(Config.init.set(val))))
+    typeof(this) set(T)(T val) if (is(typeof(Config.init.set(val))))
     {
         Config tmp = config;
         tmp.set(val);
@@ -354,19 +353,8 @@ public:
         }
     }
 
-    /++ Read data from port
-
-        Params:
-            buf = preallocated buffer for reading
-
-        Returns: slice of buf with readed data
-
-        Throws:
-            PortClosedException if port closed
-            ReadException if read error occurs
-            TimeoutException if timeout expires (for blocking and fiber ready)
-     +/
-    void[] read(void[] buf)
+protected:
+    void[] m_read(void[] buf)
     {
         // non-blocking algorithm
         if (closed) throw new PortClosedException(port);
@@ -404,30 +392,17 @@ public:
         return buf[0..res];
     }
 
-    /++ Write data to port
-
-        Params:
-            arr = data for writing
-        
-        Returns: count of writen bytes
-
-        Throws:
-            PortClosedException if port closed
-            WriteException if read error occurs
-            TimeoutException if timeout expires (for blocking and fiber ready)
-     +/
-    ptrdiff_t write(const(void[]) arr)
+    size_t m_write(const(void[]) arr)
     {
         // non-blocking algorithm
         if (closed) throw new PortClosedException(port);
 
-        ptrdiff_t res;
         auto ptr = arr.ptr;
         auto len = arr.length;
 
         version (Posix)
         {
-            res = posixWrite(_handle, ptr, len);
+            ptrdiff_t res = posixWrite(_handle, ptr, len);
             if (res < 0)
             {
                 if (errno == EAGAIN) res = 0; // buffer filled
@@ -436,21 +411,18 @@ public:
         }
         version (Windows)
         {
-            uint sres;
-            auto wfr = WriteFile(_handle, ptr, cast(uint)len, &sres, null);
+            uint res;
+            auto wfr = WriteFile(_handle, ptr, cast(uint)len, &res, null);
             if (!wfr)
             {
                 auto err = GetLastError();
-                if (err == ERROR_IO_PENDING) { /+ buffer filled +/ }
+                if (err == ERROR_IO_PENDING) res = 0;
                 else throw new WriteException(port, text("error ", err));
             }
-            res = sres;
         }
 
         return res;
     }
-
-protected:
 
     /// open handler, set new config
     void setup(Config conf)
@@ -623,42 +595,8 @@ protected:
 
 /++ Timed work with serial port
 
-    `read` and `write` methods can throw `TimeoutException`
-
-    Receive data time schema:
-
-    ------
-    ---|-------|--------------|-------|--> t
-     call      |              |       |
-     read      |              |       |
-       |       |              |       |
-       |       |<----data receive---->|
-       |       |=====   ====  | ======|
-       |       |              |
-       |       |<-readedData->|
-       |                      | 
-       |<---readTimeoutSum--->|
-       |                    return
-       |<---read work time--->|
-    ------
-
-    where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
-
-    With configuration `readAvailable` (default configuration)
-
-    ---
-    if (readedData.length == 0)
-        throw TimeoutException(port);
-    ---
-
-    With configuration `readAllOrThrow`
-
-    ---
-    if (readedData.length < dataBuffer.length)
-        throw TimeoutException(port);
-    ---
  +/
-abstract class SerialPortTm : SerialPort
+abstract class SerialPort : SerialPortBase
 {
 protected:
 
@@ -672,9 +610,9 @@ protected:
     
 public:
 
-    /++ Construct SerialPortTm
+    /++ Construct SerialPort
 
-        See_Also: SerialPort.this
+        See_Also: SerialPortBase.this
      +/
     this(string exmode) { super(exmode); }
 
@@ -703,7 +641,7 @@ public:
         _readTimeoutMult = Duration.zero;
         updateTimeouts();
 
-        try while(true) read(buf); catch (TimeoutException e) {}
+        try while(true) read(buf, true); catch (TimeoutException e) {}
 
         _readTimeout = rt;
         _readTimeoutMult = rtm;
@@ -752,4 +690,66 @@ public:
             updateTimeouts();
         }
     }
+
+    /++ Read data from port
+
+        Receive data time schema:
+
+        ------
+        ---|-------|--------------|-------|--> t
+         call      |              |       |
+         read      |              |       |
+           |       |              |       |
+           |       |<data receive process>|
+           |       |=====   ====  | ======|
+           |       |              |
+           |       |<-readedData->|
+           |                      | 
+           |<---readTimeoutSum--->|
+           |                    return
+           |<---read work time--->|
+        ------
+
+        where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
+
+        if returnAvailable is false
+
+        ---
+        if (readedData.length < dataBuffer.length)
+            throw TimeoutException(port);
+        ---
+
+        if returnAvailable is true
+
+        ---
+        if (readedData.length == 0)
+            throw TimeoutException(port);
+        else return readedData;
+        ---
+
+        Params:
+            buf = preallocated buffer for reading
+            returnAvailable = flag what define behavior if
+                              readedData.length < buf.length then
+                              readTimeoutSum is expires
+
+        Returns: slice of buf with readed data
+        Throws:
+            PortClosedException if port closed
+            ReadException if read error occurs
+            TimeoutException if timeout expires
+     +/
+    abstract void[] read(void[] buf, bool returnAvailable=false);
+
+    /++ Write data to port
+
+        Params:
+            arr = data for writing
+
+        Throws:
+            PortClosedException if port closed
+            WriteException if read error occurs
+            TimeoutException if timeout expires
+     +/
+    abstract void write(const(void[]) buf);
 }

@@ -5,9 +5,6 @@
  +/
 module serialport;
 
-version (readAvailable) {} else version (readAllOrThrow) {}
-else static assert(0, "one of readAvailable or readAllOrThrow must be selected");
-
 version (Posix) {} else version (Windows) {}
 else static assert(0, "unsupported platform");
 
@@ -16,6 +13,7 @@ public
     import serialport.base;
     import serialport.config;
     import serialport.block;
+    import serialport.fiberready;
     import serialport.nonblock;
     import serialport.exception;
     import serialport.types;
@@ -86,6 +84,13 @@ class SocatPipe : ComPipe
     }
 }
 
+unittest
+{
+    enum socat_out_ln = "2018/03/08 02:56:58 socat[30331] N PTY is /dev/pts/1";
+    assert(SocatPipe.parsePort(socat_out_ln) == "/dev/pts/1");
+    assertThrown(SocatPipe.parsePort("some string"));
+}
+
 class DefinedPorts : ComPipe
 {
     string[2] env;
@@ -124,13 +129,6 @@ override:
     string[2] ports() const @property { return _ports; }
 }
 
-unittest
-{
-    enum socat_out_ln = "2018/03/08 02:56:58 socat[30331] N PTY is /dev/pts/1";
-    assert(SocatPipe.parsePort(socat_out_ln) == "/dev/pts/1");
-    assertThrown(SocatPipe.parsePort("some string"));
-}
-
 ComPipe getPlatformComPipe(int bufsz)
 {
     stderr.writeln("available ports count: ", SerialPort.listAvailable.length);
@@ -150,7 +148,7 @@ ComPipe getPlatformComPipe(int bufsz)
         else version (OSX) return new SocatPipe(bufsz);
         else
         {
-            pragma(msg, "platform doesn't support, no real test");
+            stderr.writeln(msg, "platform doesn't support, no real test");
             return null;
         }
     }
@@ -179,30 +177,24 @@ unittest
         stderr.writefln("pipe ports: %s <=> %s", cp.ports[0], cp.ports[1]);
     }
 
-    version (readAvailable)
-    {
-        // tests designed for readAvailable configuration
-
-        reopen();
-        utCall!(threadTest!SerialPortFR)("thread test for non-block", cp.ports);
-        reopen();
-        utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);
-    }
-
+    reopen();
+    utCall!(threadTest!SerialPortFR)("thread test for non-block", cp.ports);
+    reopen();
+    utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);
     reopen();
     utCall!fiberTest("fiber test", cp.ports);
-
     reopen();
     utCall!fiberTest2("fiber test 2", cp.ports);
-
     reopen();
     utCall!readTimeoutTest("read timeout test", cp.ports);
-
     reopen();
-    utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready and current config", cp.ports);
-
+    utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready", cp.ports, true);
     reopen();
-    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading and current config", cp.ports);
+    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading", cp.ports, true);
+    reopen();
+    utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready and readAvailable", cp.ports, true);
+    reopen();
+    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading and readAvailable", cp.ports, true);
 }
 
 auto utCall(alias fnc, Args...)(string name, Args args)
@@ -246,7 +238,7 @@ void threadTest(SPT)(string[2] ports)
                     try
                     {
                         version (readAvailable) Thread.sleep(500.msecs);
-                        auto data = com.read(buffer);
+                        auto data = com.read(buffer, true);
 
                         if (data.length)
                         {
@@ -393,7 +385,7 @@ class CFSlave : CF
     override void run()
     {
         stderr.writeln("start read loop");
-        result = com.readAll(data, readTimeout, readGapTimeout);
+        result = com.readContinues(data, readTimeout, readGapTimeout);
         stderr.writeln("finish read loop");
     }
 }
@@ -511,17 +503,19 @@ void readTimeoutTest(string[2] ports)
     auto comA = new SerialPortFR(ports[0], 19200);
     scope (exit) comA.close();
     comA.flush();
-    assertThrown!TimeoutException(comA.readAll(buffer[], 1.msecs, 1.msecs));
+    assertThrown!TimeoutException(comA.readContinues(buffer[], 1.msecs, 1.msecs));
     assertThrown!TimeoutException(comA.read(buffer[]));
+    assertThrown!TimeoutException(comA.read(buffer[], true));
 
     auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
     scope (exit) comB.close();
     comB.flush();
     comB.readTimeout = 1.msecs;
     assertThrown!TimeoutException(comB.read(buffer[]));
+    assertThrown!TimeoutException(comB.read(buffer[], true));
 }
 
-void readTimeoutTestConfig(SP : SerialPortTm)(string[2] ports)
+void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, bool returnAvailable)
 {
     enum mode = "38400:8N1";
 
@@ -550,12 +544,12 @@ void readTimeoutTestConfig(SP : SerialPortTm)(string[2] ports)
 
     Thread.sleep(rt);
 
-    version (readAvailable)
+    if (returnAvailable)
     {
-        assertNotThrown(data = com.read(buffer));
+        assertNotThrown(data = com.read(buffer, true));
         assert(cast(string)data == SEND);
     }
-    version (readAllOrThrow)
+    else
         assertThrown!TimeoutException(data = com.read(buffer));
 
     receive((LinkTerminated e) { });
