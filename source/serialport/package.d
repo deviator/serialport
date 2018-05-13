@@ -382,7 +382,7 @@ void testNonBlock(string[2] ports)
 
     spawnLinked(&thfunc, ports[1]);
 
-    Thread.sleep(15.msecs);
+    Thread.sleep(100.msecs);
 
     size_t written;
     while (written < data.length)
