@@ -641,7 +641,9 @@ public:
         _readTimeoutMult = Duration.zero;
         updateTimeouts();
 
-        try while(true) read(buf, true); catch (TimeoutException e) {}
+        void[] tmp;
+        do tmp = read(buf, CanRead.zero);
+        while (tmp.length);
 
         _readTimeout = rt;
         _readTimeoutMult = rtm;
@@ -691,6 +693,14 @@ public:
         }
     }
 
+    ///
+    enum CanRead
+    {
+        allOrNothing, ///
+        anyNonZero, ///
+        zero ///
+    }
+
     /++ Read data from port
 
         Receive data time schema:
@@ -712,14 +722,17 @@ public:
 
         where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
 
-        if returnAvailable is false
+        if canReturn is:
+        
+        CanRead.allOrNothing
 
         ---
         if (readedData.length < dataBuffer.length)
             throw TimeoutException(port);
+        else return readedData;
         ---
 
-        if returnAvailable is true
+        CanReturn.anyNonZero
 
         ---
         if (readedData.length == 0)
@@ -727,11 +740,16 @@ public:
         else return readedData;
         ---
 
+        CanReturn.zero
+
+        ---
+        return readedData;
+        ---
+
         Params:
             buf = preallocated buffer for reading
-            returnAvailable = flag what define behavior if
-                              readedData.length < buf.length then
-                              readTimeoutSum is expires
+            cr = flag what define behavior if readedData.length < buf.length
+                 then readTimeoutSum is expires
 
         Returns: slice of buf with readed data
         Throws:
@@ -739,7 +757,22 @@ public:
             ReadException if read error occurs
             TimeoutException if timeout expires
      +/
-    abstract void[] read(void[] buf, bool returnAvailable=false);
+    abstract void[] read(void[] buf, CanRead cr=CanRead.allOrNothing);
+
+    ///
+    protected void checkAbility(CanRead cr, size_t readed, size_t buffer)
+    {
+        bool err;
+
+        final switch (cr) with(CanRead)
+        {
+            case allOrNothing: err = readed != buffer; break;
+            case anyNonZero:   err = readed == 0; break;
+            case zero: /+ no errors +/ break;
+        }
+
+        if (err) throw new TimeoutException(port);
+    }
 
     /++ Write data to port
 

@@ -26,7 +26,7 @@ public:
     /// ditto
     this(string port, Config conf) { super(port, conf); }
 
-    override void[] read(void[] buf, bool returnAvailable=false)
+    override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)
     {
         if (closed) throw new PortClosedException(port);
 
@@ -63,12 +63,7 @@ public:
                 throw new ReadException(port, text("error ", GetLastError()));
         }
 
-        bool timeIsOut;
-
-        if (returnAvailable) timeIsOut = res == 0;
-        else timeIsOut = res != buf.length;
-
-        if (timeIsOut) throw new TimeoutException(port);
+        checkAbility(cr, res, buf.length);
 
         return buf[0..res];
     }

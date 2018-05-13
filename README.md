@@ -56,7 +56,7 @@ Class `SerialPortNonBlk` provides non-blocking `void[] read(void[] buf)`
 (immediatlly return data in system serial port buffer) and
 `size_t write(const(void[]))` (return writed bytes count at the first onset).
 
-Class `SerialPort` provides `void[] read(void[] buf, bool returnAvailable=false)`,
+Class `SerialPort` provides `void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)`,
 `void write(const(void[]))` and timeouts properties.
 
 Class `SerialPortBlk` provides blocking `read` and `write`.
@@ -73,7 +73,7 @@ finish write all data to serial port during
 `timeout = writeTimeout + writeTimeoutMult * data.length`.
 
 `read` method of `SerialPort` also can throw `TimeoutException`,
-but here the behavior can be different depending on the flag `returnAvailable`.
+but here the behavior can be different depending on the `CanRead` flag.
 
 Receive data time schema:
 
@@ -93,20 +93,29 @@ Receive data time schema:
 
 where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
 
-if `returnAvailable` is true
+if `CanReturn cr` flag is:
 
-```d
-if (readedData.length == 0)
-    throw TimeoutException(port);
-else return readedData;
-```
+* `CanRead.allOrNothing`
 
-if `returnAvailable` is false
+    ```d
+    if (readedData.length < dataBuffer.length)
+        throw TimeoutException(port);
+    else return readedData;
+    ```
 
-```d
-if (readedData.length < dataBuffer.length)
-    throw TimeoutException(port);
-```
+* `CanReturn.anyNonZero`
+
+    ```d
+    if (readedData.length == 0)
+        throw TimeoutException(port);
+    else return readedData;
+    ```
+
+* `CanReturn.zero`
+
+    ```d
+    return readedData;
+    ```
 
 ## `SerialPortFR.readContinues` method
 

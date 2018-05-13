@@ -48,89 +48,53 @@ protected:
     }
 
 public:
+    ///
+    alias SleepFunc = void delegate(Duration);
+
     /// extended delegate for perform sleep
-    void delegate(Duration dt) sleepFunc;
+    SleepFunc sleepFunc;
 
-    /++ Construct SerialPortFR using extend mode string.
+    /++ Construct SerialPortFR
 
-        Extend mode string must have port name (e.g. "com1" or "/dev/ttyUSB0")
-
-        Example extend mode string: "/dev/ttyUSB0:9600:8N1"
-
-        Params:
-            exmode = extend mode string
-            slp = sleep delegate
-
-        See_Also: SerialPort.this(string exmode), Config.parse, Config.set(string mode)
+        See_Also: SerialPort.this
      +/
-    this(string exmode, void delegate(Duration) slp=null)
-    {
-        this.sleepFunc = slp;
-        super(exmode);
-    }
+    this(string exmode, SleepFunc sf=null)
+    { sleepFunc = sf; super(exmode); }
 
-    /++ Params:
-            port = port name
-            mode = config mode string
-            slp = sleep delegate
+    /// ditto
+    this(string port, string mode, SleepFunc sf=null)
+    { sleepFunc = sf; super(port, mode); }
 
-        See_Also: Config.parse, Config.set(string mode)
-     +/
-    this(string port, string mode, void delegate(Duration) slp=null)
-    { this(port, Config.parse(mode), slp); }
+    /// ditto
+    this(string port, uint baudRate, SleepFunc sf=null)
+    { sleepFunc = sf; super(port, baudRate); }
 
-    /++ Params:
-            port = port name
-            baudRate = baudrate
-            slp = sleep delegate
-     +/
-    this(string port, uint baudRate, void delegate(Duration) slp=null)
-    { this(port, Config(baudRate), slp); }
+    /// ditto
+    this(string port, uint baudRate, string mode, SleepFunc sf=null)
+    { sleepFunc = sf; super(port, baudRate, mode); }
 
-    /++ Params:
-            port = port name
-            baudRate = baudrate
-            mode = config mode string
-            slp = sleep delegate
+    /// ditto
+    this(string port, Config conf, SleepFunc sf=null)
+    { sleepFunc = sf; super(port, conf); }
 
-        See_Also: Config.parse, Config.set(string mode)
-     +/
-    this(string port, uint baudRate, string mode, void delegate(Duration) slp=null)
-    { this(port, Config(baudRate).set(mode), slp); }
-
-    /++ Params:
-            port = port name
-            conf = config of serialport
-            slp = sleep delegate
-     +/
-    this(string port, Config conf, void delegate(Duration) slp=null)
-    {
-        this.sleepFunc = slp;
-        super(port, conf);
-    }
-
-    override void[] read(void[] buf, bool returnAvailable=false)
+    override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)
     {
         if (closed) throw new PortClosedException(port);
 
-        size_t readed;
+        size_t res;
         const timeout = buf.length * writeTimeoutMult + writeTimeout;
         const pause = ioPause();
         const sw = StopWatch(AutoStart.yes);
         while (sw.peek < timeout)
         {
-            readed += m_read(buf[readed..$]).length;
-            if (readed == buf.length) return buf[];
+            res += m_read(buf[res..$]).length;
+            if (res == buf.length) return buf[];
             this.sleep(pause);
         }
 
-        if (returnAvailable)
-        {
-            if (readed == 0)
-                throw new TimeoutException(port);
-            else return buf[0..readed];
-        }
-        throw new TimeoutException(port);
+        checkAbility(cr, res, buf.length);
+
+        return buf[0..res];
     }
 
     override void write(const(void[]) arr)
