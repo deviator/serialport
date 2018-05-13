@@ -181,10 +181,12 @@ unittest
     utCall!fiberTest("fiber test", cp.ports);
     utCall!fiberTest2("fiber test 2", cp.ports);
     utCall!readTimeoutTest("read timeout test", cp.ports);
-    utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready", cp.ports, true);
-    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading", cp.ports, true);
-    utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready and readAvailable", cp.ports, true);
-    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading and readAvailable", cp.ports, true);
+    utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=zero", cp.ports, SerialPort.CanRead.zero);
+    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=zero", cp.ports, SerialPort.CanRead.zero);
+    utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
+    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
+    utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
+    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
 }
 
 void testPrint(Args...)(Args args) { stderr.write("    "); stderr.writeln(args); }
@@ -228,19 +230,14 @@ void threadTest(SPT)(string[2] ports)
             {
                 if (needRead)
                 {
-                    try
-                    {
-                        version (readAvailable) Thread.sleep(500.msecs);
-                        auto data = com.read(buffer, true);
+                    Thread.sleep(500.msecs);
+                    auto data = com.read(buffer, com.CanRead.zero);
 
-                        if (data.length)
-                        {
-                            testPrint("child readed: ", cast(string)(data.idup));
-                            send(ownerTid, cast(string)(data.idup));
-                        }
+                    if (data.length)
+                    {
+                        testPrint("child readed: ", cast(string)(data.idup));
+                        send(ownerTid, cast(string)(data.idup));
                     }
-                    catch (TimeoutException e)
-                        testPrint("child timeout read");
                 }
 
                 receiveTimeout(500.msecs,
@@ -551,17 +548,17 @@ void readTimeoutTest(string[2] ports)
     comA.flush();
     assertThrown!TimeoutException(comA.readContinues(buffer[], 1.msecs, 1.msecs));
     assertThrown!TimeoutException(comA.read(buffer[]));
-    assertThrown!TimeoutException(comA.read(buffer[], true));
+    assertThrown!TimeoutException(comA.read(buffer[], comA.CanRead.anyNonZero));
 
     auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
     scope (exit) comB.close();
     comB.flush();
     comB.readTimeout = 1.msecs;
     assertThrown!TimeoutException(comB.read(buffer[]));
-    assertThrown!TimeoutException(comB.read(buffer[], true));
+    assertThrown!TimeoutException(comB.read(buffer[], comB.CanRead.anyNonZero));
 }
 
-void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, bool returnAvailable)
+void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, SerialPort.CanRead cr)
 {
     enum mode = "38400:8N1";
 
@@ -574,6 +571,7 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, bool returnAvailabl
         com.flush();
         scope (exit) com.close();
         com.write(SEND);
+        Thread.sleep(1.seconds);
     }
 
     auto com = new SP(ports[0], mode);
@@ -590,13 +588,21 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, bool returnAvailabl
 
     Thread.sleep(rt);
 
-    if (returnAvailable)
+    if (cr == SerialPort.CanRead.anyNonZero)
     {
-        assertNotThrown(data = com.read(buffer, true));
+        assertNotThrown(data = com.read(buffer, cr));
         assert(cast(string)data == SEND);
+        assertThrown!TimeoutException(data = com.read(buffer, cr));
     }
-    else
+    else if (cr == SerialPort.CanRead.allOrNothing)
         assertThrown!TimeoutException(data = com.read(buffer));
+    else if (cr == SerialPort.CanRead.zero)
+    {
+        assertNotThrown(data = com.read(buffer, cr));
+        assertNotThrown(data = com.read(buffer, cr));
+        assertNotThrown(data = com.read(buffer, cr));
+    }
+    else assert(0, "not tested variant of CanRead");
 
     receive((LinkTerminated e) { });
 }
