@@ -1,5 +1,5 @@
 /++
-    Simple non-blocking work with serial port for Posix and Windows.
+    Crossplatform work with serialport.
 
     See also `example/monitor`
  +/

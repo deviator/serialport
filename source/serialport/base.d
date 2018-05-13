@@ -16,11 +16,12 @@ package import serialport.exception;
 package import serialport.types;
 package import serialport.util;
 
-///
+/++ Non-blocking work with serial port
+ +/
 class SerialPort
 {
 protected:
-    ///
+    /// 
     string port;
 
     SPHandle _handle = initHandle;
@@ -79,12 +80,15 @@ public:
     this(string port, uint baudRate, string mode)
     { this(port, Config(baudRate).set(mode)); }
 
-    ///
+    /++ Params:
+            port = port name
+            conf = config of serialport
+     +/
     this(string port, Config conf) { reopen(port, conf); }
 
     ~this() { close(); }
 
-    /// close handle
+    /// Close handle
     void close() @nogc
     {
         if (closed) return;
@@ -92,24 +96,40 @@ public:
         _handle = initHandle;
     }
 
-    ///
+    /// Port name
     string name() const @nogc @property { return port; }
 
     ///
     inout(SPHandle) handle() inout @nogc @property { return _handle; }
 
     ///
-    void reopen(string port, Config cfg)
+    void reopen(string np, Config cfg)
     {
         if (!closed) close();
-        this.port = port;
+        port = np;
         setup(cfg);
     }
 
     ///
-    override string toString() { return port ~ ":" ~ config.mode; }
-
+    void reopen(string np) { reopen(np, config); }
     ///
+    void reopen(Config cfg) { reopen(port, cfg); }
+    ///
+    void reopen() { reopen(port, config); }
+
+    /++ Returns extend mode string (example: "/dev/ttyUSB0:38400:8N1")
+     +/
+    override string toString() { return port ~ modeSplitChar ~ config.mode; }
+
+    /++ Set config value
+        Params:
+            T = typeof of parameter, avalable:
+                    int -> baudrate,
+                    DataBit -> dataBits,
+                    StopBits -> stopBits,
+                    Parity -> parity
+            val = value
+     +/
     SerialPort set(T)(T val)
         if (is(typeof(Config.init.set(val))))
     {
@@ -298,7 +318,7 @@ public:
         StopBits stopBits(StopBits v) { set(v); return v; }
     }
 
-    /++ List available serial ports in system
+    /++ List of available serial ports in system
         +/
     static string[] listAvailable() @property
     {
@@ -337,13 +357,14 @@ public:
     /++ Read data from port
 
         Params:
-            buf = buffer for reading
+            buf = preallocated buffer for reading
 
-        Returns: slice of buf
+        Returns: slice of buf with readed data
 
         Throws:
             PortClosedException if port closed
             ReadException if read error occurs
+            TimeoutException if timeout expires (for blocking and fiber ready)
      +/
     void[] read(void[] buf)
     {
@@ -386,13 +407,14 @@ public:
     /++ Write data to port
 
         Params:
-            arr = writed data
+            arr = data for writing
         
         Returns: count of writen bytes
 
         Throws:
             PortClosedException if port closed
             WriteException if read error occurs
+            TimeoutException if timeout expires (for blocking and fiber ready)
      +/
     ptrdiff_t write(const(void[]) arr)
     {
@@ -599,7 +621,43 @@ protected:
     }
 }
 
-///
+/++ Timed work with serial port
+
+    `read` and `write` methods can throw `TimeoutException`
+
+    Receive data time schema:
+
+    ------
+    ---|-------|--------------|-------|--> t
+     call      |              |       |
+     read      |              |       |
+       |       |              |       |
+       |       |<----data receive---->|
+       |       |=====   ====  | ======|
+       |       |              |
+       |       |<-readedData->|
+       |                      | 
+       |<---readTimeoutSum--->|
+       |                    return
+       |<---read work time--->|
+    ------
+
+    where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
+
+    With configuration `readAvailable` (default configuration)
+
+    ---
+    if (readedData.length == 0)
+        throw TimeoutException(port);
+    ---
+
+    With configuration `readAllOrThrow`
+
+    ---
+    if (readedData.length < dataBuffer.length)
+        throw TimeoutException(port);
+    ---
+ +/
 abstract class SerialPortTm : SerialPort
 {
 protected:
@@ -633,7 +691,8 @@ public:
     /// ditto
     this(string port, Config conf) { super(port, conf); }
 
-    ///
+    /++ Read data from serial port while exists
+     +/
     void flush()
     {
         void[128] buf = void;

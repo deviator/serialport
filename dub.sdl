@@ -2,7 +2,7 @@ name "serialport"
 targetType "library"
 description "Crossplatform work with serialport"
 authors "Oleg Butko (deviator)"
-copyright "Copyright © 2017"
+copyright "Copyright © 2017-2018"
 license "MIT"
 
 configuration "readAvailable" {

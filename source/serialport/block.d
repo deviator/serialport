@@ -3,7 +3,7 @@ module serialport.block;
 
 import serialport.base;
 
-///
+/// Blocking work serialport
 class SerialPortBlk : SerialPortTm
 {
 public:

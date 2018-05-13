@@ -48,7 +48,7 @@ package
         alias posixClose = core.sys.posix.unistd.close;
 
         alias closeHandle = posixClose;
-        /// Posix
+        /// Posix handle is int
         alias SPHandle = int;
         enum initHandle = -1;
     }
@@ -119,7 +119,7 @@ package
         }
 
         alias closeHandle = CloseHandle;
-        /// Windows
+        /// Windows is HANDLE
         alias SPHandle = HANDLE;
         enum initHandle = null;
     }

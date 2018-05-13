@@ -102,7 +102,11 @@ public:
     this(string port, uint baudRate, string mode, void delegate(Duration) slp=null)
     { this(port, Config(baudRate).set(mode), slp); }
 
-    ///
+    /++ Params:
+            port = port name
+            conf = config of serialport
+            slp = sleep delegate
+     +/
     this(string port, Config conf, void delegate(Duration) slp=null)
     {
         this.sleepFunc = slp;
@@ -158,22 +162,47 @@ public:
 
     /++ Read data while available by parts, sleep between checks.
 
+        Call `super.read` (non-blocking).
+
         Sleep time calculates from baud rate and count of bits in one byte.
 
+        -------
+        ---|-----|-----|------------|-----|------------> t
+         call    |     |            |     |
+        readAll  |     |            |     |
+           |     |     |            |     |
+           |     |<---------data receive---------->|
+           |     |=== =====   ======|     |   |== =|
+           |     |     |  |   |     |     |
+           |<-timeout->|  |   |     |     |
+           |     |<-1->|  |<2>|     |<-3->|
+           |     |                  |     |
+           |     |<---readedData--->|     |
+           |                            return
+           |<------readAll work time----->|
+        
+        (1) if readedData.length > 0 then continue reading
+            else throw TimeoutException
+        (2) silent time, if silent < frameGap then continue reading
+        (3) else if silent > frameGap then stop reading
+            and return readedData
+        -------
+
         Params:
-            arr = buffer for reading
+            buf = buffer for reading
             timeout = timeout for first byte recive
             frameGap = detect new data frame by silence period
 
-        Returns: slice of arr
+        Returns: slice of buf with readed data
 
         Throws:
             PortClosedException
             ReadException
+            TimeoutException
 
         See_Also: SerialPort.read
      +/
-    void[] readAll(void[] arr, Duration timeout=1.seconds,
+    void[] readAll(void[] buf, Duration timeout=1.seconds,
                                Duration frameGap=50.msecs)
     {
         if (closed) throw new PortClosedException(port);
@@ -187,17 +216,17 @@ public:
         full.start();
         while (true)
         {
-            const res = super.read(arr[readed..$]).length;
+            const res = super.read(buf[readed..$]).length;
 
             readed += res;
 
             // buffer filled
-            if (readed == arr.length) return arr[];
+            if (readed == buf.length) return buf[];
 
             if (res == 0)
             {
                 if (readed > 0 && silence.peek > frameGap)
-                    return arr[0..readed];
+                    return buf[0..readed];
 
                 if (!silence.running) silence.start();
             }

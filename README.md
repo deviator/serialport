@@ -32,15 +32,17 @@ auto res1 = com.read(bufferForReading);
 
 See also example: [monitor](example/monitor).
 
-`SerialPort` (`alias SerialPortNonBlk = SerialPort`) provides non-blocking
-`read` (immediatlly return data in system serial port buffer)
-and `write` (return writed bytes count at the first onset).
+Class `SerialPort` provides non-blocking `read` (immediatlly return
+data in system serial port buffer) and `write` (return writed bytes
+count at the first onset).
 
-If you want use library in fiber it provides `SerialPortFR` (Fiber Ready),
+Class `SerialPortBlk` provides blocking `read` and `write`.
+
+If you want use library in fibers it provides `SerialPortFR` (Fiber Ready),
 where `read` and `write` is loops with calling sleep function. Loops algorithms
 use `Fiber.yield` if available, or `Thread.yield` as failback. If you want
 redefine this behavior, you can set `void delegate(Duration) sleepFunc` field
-of `SerialPortFR` through ctor or directly.
+directly or through last parameter of ctor.
 
 `write` method of `SerialPortBlk` and `SerialPortFR` can throw `TimeoutException`
 if it can't finish write all data to serial port during
@@ -53,19 +55,20 @@ behavior can be different. See [library configuration](#library-configurations).
 
 ## Library configurations
 
-Transmition time schema:
+Receive data time schema:
 
 ```
 ---|-------|--------------|-------|--> t
-   |       |              |       |
+ call      |              |       |
  read      |              |       |
-   |       |              |       |
    |       |<----data receive---->|
    |       |=====   ====  | ======|
    |       |              |
    |       |<-readedData->|
-   |                      | 
+   |                      |
    |<---readTimeoutSum--->|
+   |                   return
+   |<---read work time--->|
 ```
 
 where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
@@ -98,16 +101,18 @@ throws `TimeoutException` only if timeout is expires and no data was readed.
 
 ```
 ---|-----|-----|------------|-----|------------> t
-   |     |     |            |     |
- read    |     |            |     |
+ call    |     |            |     |
+readAll  |     |            |     |
    |     |     |            |     |
    |     |<---------data receive---------->|
    |     |=== =====   ======|     |   |== =|
    |     |     |  |   |     |     |
    |<-timeout->|  |   |     |     |
    |     |<-1->|  |<2>|     |<-3->|
-   |     |                  |
-   |     |<---readedData--->|
+   |     |                  |     |
+   |     |<---readedData--->|     |
+   |                           return
+   |<------readAll work time----->|
 
 (1) if readedData.length > 0 then continue reading
     else throw TimeoutException
@@ -138,7 +143,7 @@ or `Thread.yield` otherwise. If you want redefine this behavior, you can set
 
 ### Real hardware
 
-Two paired USB->UART (FTDI FT232RL) uses for tests on linux and windows;
+Two paired USB->UART (FTDI FT232RL) uses for tests on linux and windows.
 
 ### CI
 

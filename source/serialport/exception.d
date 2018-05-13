@@ -17,6 +17,7 @@ class SerialPortException : Exception
 ///
 class SysCallException : SerialPortException
 {
+    /// errno or GetLastError
     int err;
 
     this(string msg, int err, string file=__FILE__, size_t line=__LINE__)
