@@ -144,13 +144,8 @@ ComPipe getPlatformComPipe(int bufsz)
         stderr.writeln();
         stderr.writeln("error while open predefined ports: ", e.msg);
 
-        version (linux) return new SocatPipe(bufsz);
-        else version (OSX) return new SocatPipe(bufsz);
-        else
-        {
-            stderr.writeln(msg, "platform doesn't support, no real test");
-            return null;
-        }
+        version (Posix) return new SocatPipe(bufsz);
+        else return null;
     }
 }
 
@@ -159,49 +154,47 @@ ComPipe getPlatformComPipe(int bufsz)
 unittest
 {
     stderr.writeln("=== start real test ===\n");
-    scope (success) stderr.writeln("\n=== finish real test ===");
-    scope (failure) stderr.writeln("\n!!!  fail real test  !!!");
+    scope (success) stderr.writeln("=== finish real test ===");
+    scope (failure) stderr.writeln("!!!  fail real test  !!!");
     auto cp = getPlatformComPipe(BUFFER_SIZE);
     if (cp is null)
     {
-        stderr.writeln("platform doesn't support");
+        stderr.writeln("platform doesn't support real test");
         return;
     }
 
-    stderr.writefln("port source `%s`", cp.command);
+    stderr.writefln("port source `%s`\n", cp.command);
+
     void reopen()
     {
         cp.close();
-        Thread.sleep(50.msecs);
+        Thread.sleep(30.msecs);
         cp.open();
         stderr.writefln("pipe ports: %s <=> %s", cp.ports[0], cp.ports[1]);
     }
 
     reopen();
-    utCall!(threadTest!SerialPortFR)("thread test for non-block", cp.ports);
-    reopen();
+
+    utCall!(threadTest!SerialPortFR)("thread test for fiber ready", cp.ports);
     utCall!(threadTest!SerialPortBlk)("thread test for block", cp.ports);
-    reopen();
+    utCall!testNonBlock("test non block", cp.ports);
     utCall!fiberTest("fiber test", cp.ports);
-    reopen();
     utCall!fiberTest2("fiber test 2", cp.ports);
-    reopen();
     utCall!readTimeoutTest("read timeout test", cp.ports);
-    reopen();
     utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready", cp.ports, true);
-    reopen();
     utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading", cp.ports, true);
-    reopen();
     utCall!(readTimeoutTestConfig!SerialPortFR)("read timeout test for fiber ready and readAvailable", cp.ports, true);
-    reopen();
     utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for block reading and readAvailable", cp.ports, true);
 }
 
+void testPrint(Args...)(Args args) { stderr.write("    "); stderr.writeln(args); }
+void testPrintf(Args...)(Args args) { stderr.write("    "); stderr.writefln(args); }
+
 auto utCall(alias fnc, Args...)(string name, Args args)
 {
-    stderr.writefln("--- run %s ---", name);
-    scope (success) stderr.writefln("--- success %s ---", name);
-    scope (failure) stderr.writefln("!!! failure %s !!!", name);
+    stderr.writefln(">>> run %s", name);
+    scope (success) stderr.writefln("<<< success %s\n", name);
+    scope (failure) stderr.writefln("!!! failure %s\n", name);
     return fnc(args);
 }
 
@@ -242,19 +235,19 @@ void threadTest(SPT)(string[2] ports)
 
                         if (data.length)
                         {
-                            stderr.writeln("child readed: ", cast(string)(data.idup));
+                            testPrint("child readed: ", cast(string)(data.idup));
                             send(ownerTid, cast(string)(data.idup));
                         }
                     }
                     catch (TimeoutException e)
-                        stderr.writeln("child timeout read");
+                        testPrint("child timeout read");
                 }
 
                 receiveTimeout(500.msecs,
                     (SPConfig cfg)
                     {
                         com.config = cfg;
-                        stderr.writeln("child get cfg: ", cfg.mode);
+                        testPrint("child get cfg: ", cfg.mode);
                     },
                     (bool nr)
                     {
@@ -264,7 +257,7 @@ void threadTest(SPT)(string[2] ports)
                             work = false;
                             needRead = false;
                         }
-                        stderr.writeln("get needRead ", nr);
+                        testPrint("get needRead ", nr);
                     },
                     (OwnerTerminated e) { work = false; }
                 );
@@ -272,7 +265,7 @@ void threadTest(SPT)(string[2] ports)
             catch (Throwable e)
             {
                 work = false;
-                stderr.writeln("exception in child: ", e);
+                testPrint("exception in child: ", e);
                 send(ownerTid, ExcStruct(e.msg, e.classinfo.stringof));
             }
         }
@@ -332,7 +325,7 @@ void threadTest(SPT)(string[2] ports)
 
                 if (list.empty)
                 {
-                    stderr.writeln("owner send data finish");
+                    testPrint("owner send data finish");
                     send(t, false);
                 }
                 else
@@ -342,17 +335,70 @@ void threadTest(SPT)(string[2] ports)
                 }
 
                 com.write(msg);
-                stderr.writeln("owner write msg to com: ", msg);
+                testPrint("owner write msg to com: ", msg);
             },
             (ExcStruct e) { throw new Exception("%s:%s".format(e.type, e.msg)); },
             (LinkTerminated e)
             {
                 work = false;
-                stderr.writefln("link terminated for %s, child tid %s", e.tid, t);
+                testPrintf("link terminated for %s, child tid %s", e.tid, t);
                 //assert(e.tid == t);
             }
         );
     }
+}
+
+void testNonBlock(string[2] ports)
+{
+    import std.datetime.stopwatch;
+    enum mode = "38400:8N1";
+
+    const data = "1234567890987654321qazxswedcvfrtgbnhyujm,ki";
+
+    static void thfunc(string port)
+    {
+        auto com = new SerialPortNonBlk(port, mode);
+        scope (exit) com.close();
+
+        void[1024] buffer = void;
+        size_t readed;
+
+        auto sw = StopWatch(AutoStart.yes);
+
+        // flush
+        while (sw.peek < 10.msecs)
+        {
+            com.read(buffer);
+            Thread.sleep(1.msecs);
+        }
+
+        while (sw.peek < 1.seconds)
+            readed += com.read(buffer[readed..$]).length;
+
+        send(ownerTid, buffer[0..readed].idup);
+
+        Thread.sleep(200.msecs);
+    }
+
+    auto com = new SerialPortNonBlk(ports[0], 38400, "8N1");
+    scope (exit) com.close();
+
+    spawnLinked(&thfunc, ports[1]);
+
+    Thread.sleep(15.msecs);
+
+    size_t written;
+    while (written < data.length)
+        written += com.write(data[written..$]);
+
+    receive((immutable(void)[] readed)
+    {
+        testPrint("readed: ", cast(string)readed);
+        testPrint("  data: ", data);
+        assert(cast(string)readed == data);
+    });
+
+    receive((LinkTerminated e) { });
 }
 
 class CF : Fiber
@@ -384,9 +430,9 @@ class CFSlave : CF
 
     override void run()
     {
-        stderr.writeln("start read loop");
+        testPrint("start read loop");
         result = com.readContinues(data, readTimeout, readGapTimeout);
-        stderr.writeln("finish read loop");
+        testPrint("finish read loop");
     }
 }
 
@@ -405,10 +451,10 @@ class CFMaster : CF
 
     override void run()
     {
-        stderr.writeln("start write loop");
+        testPrint("start write loop");
         com.writeTimeout = writeTimeout;
         com.write(data);
-        stderr.writeln("finish write loop");
+        testPrint("finish write loop");
     }
 }
 
@@ -436,7 +482,7 @@ void fiberTest(string[2] ports)
                 import std.algorithm : equal;
                 enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
                 work = false;
-                stderr.writeln("basic loop steps: ", step);
+                testPrint("basic loop steps: ", step);
             }
             else throw new Exception(text(slave.result, " != ", master.data));
         }
@@ -487,7 +533,7 @@ void fiberTest2(string[2] ports)
                 import std.algorithm : equal;
                 enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
                 work = false;
-                stderr.writeln("basic loop steps: ", step);
+                testPrint("basic loop steps: ", step);
             }
         }
     }
