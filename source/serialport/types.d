@@ -111,7 +111,7 @@ package
             DWORD WriteTotalTimeoutConstant;
         }
 
-        extern(Windows)
+        extern(Windows) @nogc
         {
             bool GetCommState(HANDLE hFile, DCB* lpDCB);
             bool SetCommState(HANDLE hFile, DCB* lpDCB);

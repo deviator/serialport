@@ -95,7 +95,7 @@ public:
             uint written;
 
             if (!WriteFile(_handle, arr.ptr, cast(uint)arr.length, &written, null))
-                throw new WriteException(port, "win write", GetLastError());
+                throwWriteException(port, "win write", GetLastError());
 
             if (arr.length != written)
                 throwTimeoutException(port, "write timeout");

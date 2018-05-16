@@ -275,8 +275,9 @@ public:
                     throwUnsupportedException(port, c.baudRate);
             }
 
-            const tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
-                               Parity.even: EVENPARITY][c.parity];
+            auto tmpParity = NOPARITY;
+            if (c.parity == Parity.odd) tmpParity = ODDPARITY;
+            if (c.parity == Parity.even) tmpParity = EVENPARITY;
 
             if (cfg.Parity != tmpParity)
             {
@@ -285,9 +286,8 @@ public:
                     throwUnsupportedException(port, c.parity);
             }
 
-            const tmpStopBits = [StopBits.one: ONESTOPBIT,
-                                 StopBits.onePointFive: ONESTOPBIT,
-                                 StopBits.two: TWOSTOPBITS][c.stopBits];
+            auto tmpStopBits = ONESTOPBIT;
+            if (c.stopBits == StopBits.two) tmpStopBits = TWOSTOPBITS;
 
             if (cfg.StopBits != tmpStopBits)
             {
