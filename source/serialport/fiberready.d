@@ -34,7 +34,7 @@ protected:
 
     /++ Calc pause for sleep in read and write loops
      +/
-    Duration ioPause()
+    Duration ioPause() @nogc
     {
         auto cfg = config;
         auto cnt = 1 + // start bit
@@ -79,7 +79,7 @@ public:
 
     override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)
     {
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         size_t res;
         const timeout = buf.length * writeTimeoutMult + writeTimeout;
@@ -99,7 +99,7 @@ public:
 
     override void write(const(void[]) arr)
     {
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         size_t written;
         const timeout = arr.length * writeTimeoutMult + writeTimeout;
@@ -112,7 +112,7 @@ public:
             this.sleep(pause);
         }
 
-        throw new TimeoutException(port);
+        throwTimeoutException(port, "write timeout");
     }
 
     /++ Read data while available by parts, sleep between checks.
@@ -158,7 +158,7 @@ public:
     void[] readContinues(void[] buf, Duration startTimeout=1.seconds,
                                      Duration frameGap=50.msecs)
     {
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         ptrdiff_t readed;
 
@@ -190,7 +190,7 @@ public:
             }
 
             if (readed == 0 && full.peek > startTimeout)
-                throw new TimeoutException(port);
+                throwTimeoutException(port, "read timeout");
 
             this.sleep(pause);
         }

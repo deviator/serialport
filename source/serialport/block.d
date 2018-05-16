@@ -28,7 +28,7 @@ public:
 
     override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)
     {
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         version (Posix)
         {
@@ -45,14 +45,14 @@ public:
 
             const rv = select(_handle + 1, &sset, null, null, &ctm);
             if (rv == -1)
-                throw new SysCallException("select", errno);
+                throwSysCallException(port, "select", errno);
             
             ssize_t res = 0;
             if (rv)
             {
                 res = posixRead(handle, buf.ptr, buf.length);
                 if (res < 0)
-                    throw new ReadException(port, text("errno ", errno));
+                    throwReadException(port, "posix read", errno);
             }
         }
         else
@@ -60,7 +60,7 @@ public:
             uint res;
 
             if (!ReadFile(handle, buf.ptr, cast(uint)buf.length, &res, null))
-                throw new ReadException(port, text("error ", GetLastError()));
+                throwReadException(port, "win read", GetLastError());
         }
 
         checkAbility(cr, res, buf.length);
@@ -70,7 +70,7 @@ public:
 
     override void write(const(void[]) arr)
     {
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         version (Posix)
         {
@@ -80,12 +80,12 @@ public:
             while (written < arr.length)
             {
                 if (full.peek > ttm)
-                    throw new TimeoutException(port);
+                    throwTimeoutException(port, "write timeout");
 
                 const res = posixWrite(_handle, arr[written..$].ptr, arr.length - written);
 
                 if (res < 0)
-                    throw new WriteException(port, text("errno ", errno));
+                    throwWriteException(port, "posix write", errno);
 
                 written += res;
             }
@@ -95,25 +95,25 @@ public:
             uint written;
 
             if (!WriteFile(_handle, arr.ptr, cast(uint)arr.length, &written, null))
-                throw new WriteException(port, text("error ", GetLastError()));
+                throw new WriteException(port, "win write", GetLastError());
 
             if (arr.length != written)
-                throw new TimeoutException(port);
+                throwTimeoutException(port, "write timeout");
         }
     }
 
 protected:
 
-    override void[] m_read(void[])
+    override void[] m_read(void[]) @nogc
     { assert(0, "disable m_read for blocking"); }
-    override size_t m_write(const(void)[])
+    override size_t m_write(const(void)[]) @nogc
     { assert(0, "disable m_write for blocking"); }
 
-    override void updateTimeouts() { version (Windows) updTimeouts(); }
+    override void updateTimeouts() @nogc { version (Windows) updTimeouts(); }
 
     version (Windows)
     {
-        override void updTimeouts()
+        override void updTimeouts() @nogc
         {
             setTimeouts(0, cast(DWORD)readTimeoutMult.total!"msecs",
                            cast(DWORD)readTimeout.total!"msecs",
@@ -129,7 +129,7 @@ protected:
             openPort();
 
             if (fcntl(_handle, F_SETFL, 0) == -1)  // disable O_NONBLOCK
-                throw new SysCallException("fcntl", errno);
+                throwSysCallException(port, "fcntl", errno);
 
             initialConfig(conf);
         }

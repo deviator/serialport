@@ -50,7 +50,7 @@ public:
     this(string exmode)
     {
         auto s = exmode.split(modeSplitChar);
-        if (s.length == 0) throw new ParseModeException("empty mode");
+        if (s.length == 0) throw new ParseModeException("empty config mode");
         this(s[0], s.length > 1 ? Config.parse(s[1..$].join(modeSplitChar)) : Config.init);
     }
 
@@ -130,7 +130,16 @@ public:
                     Parity -> parity
             val = value
      +/
-    typeof(this) set(T)(T val) if (is(typeof(Config.init.set(val))))
+    typeof(this) set(T)(T val) @nogc if (is(typeof(Config.init.set(val))))
+    {
+        Config tmp = config;
+        tmp.set(val);
+        config = tmp;
+        return this;
+    }
+
+    /// Set config mode string
+    typeof(this) set(string val)
     {
         Config tmp = config;
         tmp.set(val);
@@ -150,9 +159,9 @@ public:
         const for disallow `com.config.set(value)`
         use `com.set(value)` instead
      +/
-    const(Config) config() @property const
+    const(Config) config() @property const @nogc
     {
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         Config ret;
 
@@ -170,7 +179,8 @@ public:
                  if (opt.c_cflag.hasFlag(CS8)) ret.dataBits = DataBits.data8;
             else if (opt.c_cflag.hasFlag(CS7)) ret.dataBits = DataBits.data7;
             else if (opt.c_cflag.hasFlag(CS6)) ret.dataBits = DataBits.data6;
-            else ret.dataBits = DataBits.data5;
+            else if (opt.c_cflag.hasFlag(CS5)) ret.dataBits = DataBits.data5;
+            else throwSerialPortException(port, "unknown flags for databits");
 
             ret.stopBits = opt.c_cflag.hasFlag(CSTOPB) ? StopBits.two : StopBits.one;
         }
@@ -181,18 +191,17 @@ public:
 
             ret.baudRate = cast(uint)cfg.BaudRate;
 
-            enum pAA = [NOPARITY: Parity.none,
-                        ODDPARITY: Parity.odd,
-                        EVENPARITY: Parity.even];
+            switch (cfg.Parity)
+            {
+                case NOPARITY:   ret.parity = Parity.none; break;
+                case ODDPARITY:  ret.parity = Parity.odd; break;
+                case EVENPARITY: ret.parity = Parity.even; break;
+                default: throwSerialPortException(port, "unknown parity"); break;
+            }
 
-            ret.parity = pAA[cfg.Parity];
-
-            enum dbAA = [5: DataBits.data5,
-                         6: DataBits.data6,
-                         7: DataBits.data7,
-                         8: DataBits.data8];
-
-            ret.dataBits = dbAA.get(cfg.ByteSize, DataBits.data8);
+            if (cfg.ByteSize < 5 || cfg.ByteSize > 8)
+                throwSerialPortException(port, "unknown databist count");
+            ret.dataBits = cast(DataBits)cfg.ByteSize;
 
             ret.stopBits = cfg.StopBits == ONESTOPBIT ? StopBits.one : StopBits.two;
         }
@@ -201,10 +210,9 @@ public:
     }
 
     /// Set config
-    void config(Config c) @property
+    void config(Config c) @property @nogc
     {
-        alias UE = UnsupportedException;
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         version (Posix)
         {
@@ -239,24 +247,21 @@ public:
             }
 
             opt.c_cflag &= ~CSIZE;
-            switch (c.dataBits) {
-                case DataBits.data5: opt.c_cflag |= CS5; break;
-                case DataBits.data6: opt.c_cflag |= CS6; break;
-                case DataBits.data7: opt.c_cflag |= CS7; break;
-                case DataBits.data8: opt.c_cflag |= CS8; break;
-                default:
-                    errorf("config dataBits is setted as %d, set default CS8", c.dataBits);
-                    opt.c_cflag |= CS8;
-                    break;
+            final switch (c.dataBits) with (DataBits)
+            {
+                case data5: opt.c_cflag |= CS5; break;
+                case data6: opt.c_cflag |= CS6; break;
+                case data7: opt.c_cflag |= CS7; break;
+                case data8: opt.c_cflag |= CS8; break;
             }
 
             m_tcsetattr(TCSANOW, &opt);
 
-            auto test = config;
-            enforce(test.baudRate == c.baudRate, new UE(c.baudRate));
-            enforce(test.parity   == c.parity,   new UE(c.parity));
-            enforce(test.stopBits == c.stopBits, new UE(c.stopBits));
-            enforce(test.dataBits == c.dataBits, new UE(c.dataBits));
+            const test = config;
+            if (test.baudRate != c.baudRate) throwUnsupportedException(port, c.baudRate);
+            if (test.parity   != c.parity)   throwUnsupportedException(port, c.parity);
+            if (test.stopBits != c.stopBits) throwUnsupportedException(port, c.stopBits);
+            if (test.dataBits != c.dataBits) throwUnsupportedException(port, c.dataBits);
         }
         version (Windows)
         {
@@ -266,7 +271,8 @@ public:
             if (cfg.BaudRate != cast(DWORD)c.baudRate)
             {
                 cfg.BaudRate = cast(DWORD)c.baudRate;
-                enforce(SetCommState(_handle, &cfg), new UE(c.baudRate));
+                if (!SetCommState(_handle, &cfg))
+                    throwUnsupportedException(port, c.baudRate);
             }
 
             const tmpParity = [Parity.none: NOPARITY, Parity.odd: ODDPARITY,
@@ -275,7 +281,8 @@ public:
             if (cfg.Parity != tmpParity)
             {
                 cfg.Parity = cast(ubyte)tmpParity;
-                enforce(SetCommState(_handle, &cfg), new UE(c.parity));
+                if (!SetCommState(_handle, &cfg))
+                    throwUnsupportedException(port, c.parity);
             }
 
             const tmpStopBits = [StopBits.one: ONESTOPBIT,
@@ -285,18 +292,20 @@ public:
             if (cfg.StopBits != tmpStopBits)
             {
                 cfg.StopBits = cast(ubyte)tmpStopBits;
-                enforce(SetCommState(_handle, &cfg), new UE(c.stopBits));
+                if (!SetCommState(_handle, &cfg))
+                    throwUnsupportedException(port, c.stopBits);
             }
 
             if (cfg.ByteSize != cast(typeof(cfg.ByteSize))c.dataBits)
             {
                 cfg.ByteSize = cast(typeof(cfg.ByteSize))c.dataBits;
-                enforce(SetCommState(_handle, &cfg), new UE(c.dataBits));
+                if (!SetCommState(_handle, &cfg))
+                    throwUnsupportedException(port, c.dataBits);
             }
         }
     }
 
-    @property
+    @property @nogc
     {
         ///
         Parity parity() { return config.parity; }
@@ -354,10 +363,10 @@ public:
     }
 
 protected:
-    void[] m_read(void[] buf)
+    void[] m_read(void[] buf) @nogc
     {
         // non-blocking algorithm
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         auto ptr = buf.ptr;
         auto len = buf.length;
@@ -372,7 +381,7 @@ protected:
             if (sres < 0)
             {
                 if (errno == EAGAIN) sres = 0;
-                else throw new ReadException(port, text("errno ", errno));
+                else throwReadException(port, "posix read", errno);
             }
             res = sres;
         }
@@ -384,7 +393,7 @@ protected:
             {
                 auto err = GetLastError();
                 if (err == ERROR_IO_PENDING) { /+ buffer empty +/ }
-                else throw new ReadException(port, text("error ", err));
+                else throwReadException(port, "win read", err);
             }
             res = sres;
         }
@@ -392,10 +401,10 @@ protected:
         return buf[0..res];
     }
 
-    size_t m_write(const(void[]) arr)
+    size_t m_write(const(void[]) arr) @nogc
     {
         // non-blocking algorithm
-        if (closed) throw new PortClosedException(port);
+        if (closed) throwPortClosedException(port);
 
         auto ptr = arr.ptr;
         auto len = arr.length;
@@ -406,7 +415,7 @@ protected:
             if (res < 0)
             {
                 if (errno == EAGAIN) res = 0; // buffer filled
-                else throw new WriteException(port, text("errno ", errno));
+                else throwWriteException(port, "posix write", errno);
             }
         }
         version (Windows)
@@ -417,7 +426,7 @@ protected:
             {
                 auto err = GetLastError();
                 if (err == ERROR_IO_PENDING) res = 0;
-                else throw new WriteException(port, text("error ", err));
+                else throwWriteException(port, "win write", err);
             }
         }
 
@@ -428,7 +437,7 @@ protected:
     void setup(Config conf)
     {
         if (port.length == 0)
-            throw new SerialPortException("zero length name");
+            throwSerialPortException("", "zero length name");
 
         version (Posix) posixSetup(conf);
         else winSetup();
@@ -438,16 +447,16 @@ protected:
 
     version (Posix)
     {
-        void m_tcgetattr(termios* t) const
+        void m_tcgetattr(termios* t) const @nogc
         {
             if (tcgetattr(_handle, t) == -1)
-                throw new SysCallException("tcgetattr", errno);
+                throwSysCallException(port, "tcgetattr", errno);
         }
 
-        void m_tcsetattr(int v, const(termios*) t) inout
+        void m_tcsetattr(int v, const(termios*) t) inout @nogc
         {
             if (tcsetattr(_handle, v, t) == -1)
-                throw new SysCallException("tcsetattr", errno);
+                throwSysCallException(port, "tcsetattr", errno);
         }
 
         version (usetermios2)
@@ -455,7 +464,7 @@ protected:
             void m_ioctl(int v, termios2* t) inout
             {
                 if (ioctl(_handle, v, t) == -1)
-                    throw new SysCallException("ioctl", errno);
+                    throwSysCallException(port, "ioctl", errno);
             }
         }
 
@@ -469,7 +478,7 @@ protected:
         {
             _handle = open(port.toStringz(), O_RDWR | O_NOCTTY | O_NONBLOCK);
             if (_handle == -1)
-                throw new SysCallException("open", errno);
+                throwSysCallException(port, "open", errno);
         }
 
         void initialConfig(Config conf)
@@ -503,7 +512,7 @@ protected:
             m_tcsetattr(TCSANOW, &opt);
         }
 
-        void setUintBaudRate(uint br)
+        void setUintBaudRate(uint br) @nogc
         {
             version (usetermios2)
             {
@@ -522,7 +531,7 @@ protected:
             else
             {
                 if (unixBaudList.countA(br) == 0)
-                    throw new UnsupportedException(br);
+                    throwUnsupportedException(port, br);
 
                 auto baud = unixBaudList.firstA2B(br, B0);
 
@@ -534,7 +543,7 @@ protected:
             }
         }
 
-        uint getUintBaudRate() const
+        uint getUintBaudRate() const @nogc
         {
             version (usetermios2)
             {
@@ -564,7 +573,7 @@ protected:
                         OPEN_EXISTING, 0, null);
 
             if (_handle is INVALID_HANDLE_VALUE)
-                throw new SysCallException("CreateFileA", GetLastError());
+                throwSysCallException(port, "CreateFileA", GetLastError());
 
             SetupComm(_handle, 4096, 4096);
             PurgeComm(_handle, PURGE_TXABORT | PURGE_TXCLEAR |
@@ -573,12 +582,12 @@ protected:
             updTimeouts();
         }
 
-        void updTimeouts()
+        void updTimeouts() @nogc
         {
             setTimeouts(DWORD.max, 0, 0, 0, 0);
         }
 
-        void setTimeouts(DWORD rit, DWORD rttm, DWORD rttc, DWORD wttm, DWORD wttc)
+        void setTimeouts(DWORD rit, DWORD rttm, DWORD rttc, DWORD wttm, DWORD wttc) @nogc
         {
             COMMTIMEOUTS tm;
             tm.ReadIntervalTimeout         = rit;
@@ -588,7 +597,7 @@ protected:
             tm.WriteTotalTimeoutConstant   = wttc;
 
             if (SetCommTimeouts(_handle, &tm) == 0)
-                throw new SysCallException("SetCommTimeouts", GetLastError());
+                throwSysCallException(port, "SetCommTimeouts", GetLastError());
         }
     }
 }
@@ -606,7 +615,7 @@ protected:
              _readTimeoutMult = Duration.zero;
 
 
-    void updateTimeouts() {}
+    void updateTimeouts() @nogc {}
     
 public:
 
@@ -650,7 +659,7 @@ public:
         updateTimeouts();
     }
 
-    @property
+    @property @nogc
     {
         const
         {
@@ -760,7 +769,7 @@ public:
     abstract void[] read(void[] buf, CanRead cr=CanRead.allOrNothing);
 
     ///
-    protected void checkAbility(CanRead cr, size_t readed, size_t buffer)
+    protected void checkAbility(CanRead cr, size_t readed, size_t buffer) @nogc
     {
         bool err;
 
@@ -771,7 +780,7 @@ public:
             case zero: /+ no errors +/ break;
         }
 
-        if (err) throw new TimeoutException(port);
+        if (err) throwTimeoutException(port, "read timeout");
     }
 
     /++ Write data to port

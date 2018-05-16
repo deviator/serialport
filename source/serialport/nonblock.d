@@ -36,7 +36,7 @@ class SerialPortNonBlk : SerialPortBase
             PortClosedException if port closed
             ReadException if read error occurs
      +/
-    void[] read(void[] buf) { return m_read(buf); }
+    void[] read(void[] buf) @nogc { return m_read(buf); }
 
     /++ Non-block write data to port
 
@@ -49,5 +49,5 @@ class SerialPortNonBlk : SerialPortBase
             PortClosedException if port closed
             WriteException if read error occurs
      +/
-    size_t write(const(void)[] buf) { return m_write(buf); }
+    size_t write(const(void)[] buf) @nogc { return m_write(buf); }
 }
