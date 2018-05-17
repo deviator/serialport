@@ -187,6 +187,7 @@ unittest
     utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
     utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
     utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
+    utCall!(fiberSleepFuncTest)("fiber sleep func test", cp.ports);
 }
 
 void testPrint(Args...)(Args args) { stderr.write("    "); stderr.writeln(args); }
@@ -613,23 +614,29 @@ void fiberSleepFuncTest(string[2] ports)
     static void sf(Duration d) @nogc
     {
         auto sw = StopWatch(AutoStart.yes);
-        while (sw.peek < d) Fiber.getThis.yield();
+        if (auto f = Fiber.getThis)
+            while (sw.peek < d) f.yield();
+        else Thread.sleep(d);
     }
+
+    CFMaster master;
 
     size_t sf2_cnt;
     void sf2(Duration d) @nogc
     {
         auto sw = StopWatch(AutoStart.yes);
-        while (sw.peek < d)
-        {
-            Fiber.getThis.yield();
-            sf2_cnt++;
-        }
+        if (auto f = Fiber.getThis)
+            while (sw.peek < d)
+            {
+                master.yield();
+                sf2_cnt++;
+            }
+        else Thread.sleep(d);
     }
 
     auto slave = new CFSlave(new SerialPortFR(ports[0], &sf), BUFFER_SIZE);
     scope (exit) slave.com.close();
-    auto master = new CFMaster(new SerialPortFR(ports[1], &sf2), BUFFER_SIZE);
+    master = new CFMaster(new SerialPortFR(ports[1], &sf2), BUFFER_SIZE);
     scope (exit) master.com.close();
 
     bool work = true;
