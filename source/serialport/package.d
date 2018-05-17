@@ -606,3 +606,52 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, SerialPort.CanRead 
 
     receive((LinkTerminated e) { });
 }
+
+void fiberSleepFuncTest(string[2] ports)
+{
+    import std.datetime.stopwatch;
+    static void sf(Duration d) @nogc
+    {
+        auto sw = StopWatch(AutoStart.yes);
+        while (sw.peek < d) Fiber.getThis.yield();
+    }
+
+    size_t sf2_cnt;
+    void sf2(Duration d) @nogc
+    {
+        auto sw = StopWatch(AutoStart.yes);
+        while (sw.peek < d)
+        {
+            Fiber.getThis.yield();
+            sf2_cnt++;
+        }
+    }
+
+    auto slave = new CFSlave(new SerialPortFR(ports[0], &sf), BUFFER_SIZE);
+    scope (exit) slave.com.close();
+    auto master = new CFMaster(new SerialPortFR(ports[1], &sf2), BUFFER_SIZE);
+    scope (exit) master.com.close();
+
+    bool work = true;
+    int step;
+    while (work)
+    {
+        alias TERM = Fiber.State.TERM;
+        if (master.state != TERM) master.call;
+        if (slave.state != TERM) slave.call;
+
+        step++;
+        Thread.sleep(30.msecs);
+        if (master.state == TERM && slave.state == TERM)
+        {
+            if (slave.result.length == master.data.length)
+            {
+                import std.algorithm : equal;
+                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
+                work = false;
+                testPrint("basic loop steps: ", step);
+            }
+            else throw new Exception(text(slave.result, " != ", master.data));
+        }
+    }
+}

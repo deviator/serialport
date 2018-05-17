@@ -50,7 +50,8 @@ class ReadException : SysCallException
 class WriteException : SysCallException
 { private this() @safe pure nothrow @nogc { super(); } }
 
-private E setFields(E: SerialPortException)(E e, string port, string msg, string file, size_t line)
+private E setFields(E: SerialPortException)(E e, string port, string msg,
+                                              string file, size_t line)
 {
     e.port = port;
     e.msg = msg;
@@ -61,13 +62,17 @@ private E setFields(E: SerialPortException)(E e, string port, string msg, string
 
 import std.format;
 
+private enum preallocated;
+
 private mixin template throwSPEMix(E, string defaultMsg="")
     if (is(E: SerialPortException))
 {
     enum name = E.stringof;
     mixin(`
-    private __gshared auto %3$s%1$s = new %1$s;
-    void throw%1$s(string port, string msg="%2$s", string file=__FILE__, size_t line=__LINE__) @nogc
+    @preallocated
+    private %1$s %3$s%1$s;
+    void throw%1$s(string port, string msg="%2$s",
+                    string file=__FILE__, size_t line=__LINE__) @nogc
     { throw %3$s%1$s.setFields(port, msg, file, line); }
     `.format(name, defaultMsg, "prealloc")
     );
@@ -78,8 +83,10 @@ private mixin template throwSPSCEMix(E, string defaultMsg="")
 {
     enum name = E.stringof;
     mixin(`
-    private __gshared auto %3$s%1$s = new %1$s;
-    void throw%1$s(string port, string fnc, int err, string msg="%2$s", string file=__FILE__, size_t line=__LINE__) @nogc
+    @preallocated
+    private %1$s %3$s%1$s;
+    void throw%1$s(string port, string fnc, int err, string msg="%2$s",
+                    string file=__FILE__, size_t line=__LINE__) @nogc
     { 
         auto e = %3$s%1$s.setFields(port, msg, file, line);
         e.fnc = fnc;
@@ -88,6 +95,13 @@ private mixin template throwSPSCEMix(E, string defaultMsg="")
     }
     `.format(name, defaultMsg, "prealloc")
     );
+}
+
+static this()
+{
+    import std.traits : getSymbolsByUDA;
+    static foreach (sym; getSymbolsByUDA!(mixin(__MODULE__), preallocated))
+        sym = new typeof(sym);
 }
 
 mixin throwSPEMix!SerialPortException;
@@ -102,22 +116,27 @@ mixin throwSPSCEMix!WriteException;
 import serialport.types;
 import core.stdc.stdio;
 
-private __gshared char[1024] UEMPB;
-private __gshared auto preallocUnsupported = new UnsupportedException;
+private char[1024] UEMPB;
 
-void throwUnsupportedException(string port, int baudrate, string file=__FILE__, size_t line=__LINE__) @nogc
+@preallocated
+private UnsupportedException preallocUnsupported;
+
+void throwUnsupportedException(string port, int baudrate,
+                               string file=__FILE__, size_t line=__LINE__) @nogc
 {
     auto ln = sprintf(UEMPB.ptr, "unsupported baudrate: %d", baudrate);
     throw preallocUnsupported.setFields(port, cast(immutable)UEMPB[0..ln], file, line);
 }
 
-void throwUnsupportedException(string port, DataBits dbits, string file=__FILE__, size_t line=__LINE__) @nogc
+void throwUnsupportedException(string port, DataBits dbits,
+                          string file=__FILE__, size_t line=__LINE__) @nogc
 {
     auto ln = sprintf(UEMPB.ptr, "unsupported data bits: %d", cast(int)dbits);
     throw preallocUnsupported.setFields(port, cast(immutable)UEMPB[0..ln], file, line);
 }
 
-void throwUnsupportedException(string port, StopBits sbits, string file=__FILE__, size_t line=__LINE__) @nogc
+void throwUnsupportedException(string port, StopBits sbits,
+                           string file=__FILE__, size_t line=__LINE__) @nogc
 {
     string str;
     final switch (sbits) with (StopBits)
@@ -131,7 +150,8 @@ void throwUnsupportedException(string port, StopBits sbits, string file=__FILE__
     throw preallocUnsupported.setFields(port, cast(immutable)UEMPB[0..ln], file, line);
 }
 
-void throwUnsupportedException(string port, Parity parity, string file=__FILE__, size_t line=__LINE__) @nogc
+void throwUnsupportedException(string port, Parity parity,
+                           string file=__FILE__, size_t line=__LINE__) @nogc
 {
     string str;
     final switch (parity) with (Parity)

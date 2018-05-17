@@ -3,6 +3,10 @@ module serialport.fiberready;
 
 import serialport.base;
 
+import std.traits : isSomeFunction,
+                    FunctionAttribute,
+                    functionAttributes;
+
 /++ Serial Port Fiber Ready
  +/
 class SerialPortFR : SerialPort
@@ -51,41 +55,87 @@ protected:
 
 public:
     /// assume @nogc
+    deprecated
     alias SleepFunc = void delegate(Duration);
 
+    ///
+    alias SleepFuncNoGC = void delegate(Duration) @nogc;
+
     /// extended delegate for perform sleep
+    deprecated("sleep function must be @nogc")
     void sleepFunc(SleepFunc dlg) @property
-    {
-        import std.traits;
-        alias S = SleepFunc;
-        enum attrs = functionAttributes!S | FunctionAttribute.nogc;
-        _sleepFunc = cast(SetFunctionAttributes!(S, functionLinkage!S, attrs))dlg;
-    }
+    { _sleepFunc = cast(void delegate(Duration) @nogc)dlg; }
+
+    deprecated("sleep function must be @nogc")
+    void sleepFunc(void function(Duration) fnc) @property
+    { _sleepFunc = (d){ (cast(void function(Duration) @nogc)fnc)(d); }; }
 
     /// ditto
-    SleepFunc sleepFunc() @property { return _sleepFunc; }
+    void sleepFunc(void delegate(Duration) @nogc dlg) @property
+    { _sleepFunc = dlg; }
+
+    void sleepFunc(void function(Duration) @nogc fnc) @property
+    { _sleepFunc = (d){ fnc(d); }; }
+
+    /// ditto
+    SleepFuncNoGC sleepFunc() @property { return _sleepFunc; }
 
     /++ Construct SerialPortFR
 
         See_Also: SerialPort.this
      +/
-    this(string exmode, SleepFunc sf=null)
+    deprecated("sleep function must be @nogc")
+    this(F=SleepFunc)(string exmode, F sf)
+        if (isSomeFunction!F && !(functionAttributes!F & FunctionAttribute.nogc))
     { sleepFunc = sf; super(exmode); }
 
     /// ditto
-    this(string port, string mode, SleepFunc sf=null)
+    deprecated("sleep function must be @nogc")
+    this(F=SleepFunc)(string port, string mode, F sf)
+        if (isSomeFunction!F && !(functionAttributes!F & FunctionAttribute.nogc))
     { sleepFunc = sf; super(port, mode); }
 
     /// ditto
-    this(string port, uint baudRate, SleepFunc sf=null)
+    deprecated("sleep function must be @nogc")
+    this(F=SleepFunc)(string port, uint baudRate, F sf)
+        if (isSomeFunction!F && !(functionAttributes!F & FunctionAttribute.nogc))
     { sleepFunc = sf; super(port, baudRate); }
 
     /// ditto
-    this(string port, uint baudRate, string mode, SleepFunc sf=null)
+    deprecated("sleep function must be @nogc")
+    this(F=SleepFunc)(string port, uint baudRate, string mode, F sf)
+        if (isSomeFunction!F && !(functionAttributes!F & FunctionAttribute.nogc))
     { sleepFunc = sf; super(port, baudRate, mode); }
 
     /// ditto
-    this(string port, Config conf, SleepFunc sf=null)
+    deprecated("sleep function must be @nogc")
+    this(F=SleepFunc)(string port, Config conf, F sf)
+        if (isSomeFunction!F && !(functionAttributes!F & FunctionAttribute.nogc))
+    { sleepFunc = sf; super(port, conf); }
+
+    /// ditto
+    this(F=SleepFuncNoGC)(string exmode, F sf=null)
+        if (isSomeFunction!F)
+    { sleepFunc = sf; super(exmode); }
+
+    /// ditto
+    this(F=SleepFuncNoGC)(string port, string mode, F sf=null)
+        if (isSomeFunction!F && (functionAttributes!F & FunctionAttribute.nogc))
+    { sleepFunc = sf; super(port, mode); }
+
+    /// ditto
+    this(F=SleepFuncNoGC)(string port, uint baudRate, F sf=null)
+        if (isSomeFunction!F && (functionAttributes!F & FunctionAttribute.nogc))
+    { sleepFunc = sf; super(port, baudRate); }
+
+    /// ditto
+    this(F=SleepFuncNoGC)(string port, uint baudRate, string mode, F sf=null)
+        if (isSomeFunction!F && (functionAttributes!F & FunctionAttribute.nogc))
+    { sleepFunc = sf; super(port, baudRate, mode); }
+
+    /// ditto
+    this(F=SleepFuncNoGC)(string port, Config conf, F sf=null)
+        if (isSomeFunction!F && (functionAttributes!F & FunctionAttribute.nogc))
     { sleepFunc = sf; super(port, conf); }
 
     override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)
