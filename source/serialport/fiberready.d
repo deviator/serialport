@@ -17,9 +17,9 @@ protected:
         Params:
             dt = sleep time
      +/
-    void sleep(Duration dt)
+    void sleep(Duration dt) @nogc
     {
-        if (sleepFunc !is null) sleepFunc(dt);
+        if (_sleepFunc !is null) _sleepFunc(dt);
         else
         {
             import core.thread : Fiber, Thread;
@@ -47,12 +47,23 @@ protected:
         return (cast(ulong)(cnt / cfg.baudRate * 1e6) + 100/+reserve+/).usecs;
     }
 
+    void delegate(Duration) @nogc _sleepFunc;
+
 public:
-    ///
+    /// assume @nogc
     alias SleepFunc = void delegate(Duration);
 
     /// extended delegate for perform sleep
-    SleepFunc sleepFunc;
+    void sleepFunc(SleepFunc dlg) @property
+    {
+        import std.traits;
+        alias S = SleepFunc;
+        enum attrs = functionAttributes!S | FunctionAttribute.nogc;
+        _sleepFunc = cast(SetFunctionAttributes!(S, functionLinkage!S, attrs))dlg;
+    }
+
+    /// ditto
+    SleepFunc sleepFunc() @property { return _sleepFunc; }
 
     /++ Construct SerialPortFR
 

@@ -766,7 +766,7 @@ public:
             ReadException if read error occurs
             TimeoutException if timeout expires
      +/
-    abstract void[] read(void[] buf, CanRead cr=CanRead.allOrNothing);
+    abstract void[] read(void[] buf, CanRead cr=CanRead.allOrNothing) @nogc;
 
     ///
     protected void checkAbility(CanRead cr, size_t readed, size_t buffer) @nogc
@@ -793,5 +793,5 @@ public:
             WriteException if read error occurs
             TimeoutException if timeout expires
      +/
-    abstract void write(const(void[]) buf);
+    abstract void write(const(void[]) buf) @nogc;
 }
