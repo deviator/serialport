@@ -481,6 +481,27 @@ protected:
                 throwSysCallException(port, "open", errno);
         }
 
+        /++ Set termios.c_cc[VMIN] and .c_cc[VMAX]
+         +/
+        void setCC(ubyte[2] val)
+        {
+            termios opt;
+            m_tcgetattr(&opt);
+            opt.c_cc[VMIN] = val[0];
+            opt.c_cc[VTIME] = val[1];
+            m_tcsetattr(TCSADRAIN, &opt);
+        }
+
+        ubyte[2] getCC()
+        {
+            ubyte[2] ret;
+            termios opt;
+            m_tcgetattr(&opt);
+            ret[0] = opt.c_cc[VMIN];
+            ret[1] = opt.c_cc[VTIME];
+            return ret;
+        }
+
         void initialConfig(Config conf)
         {
             termios opt;
@@ -492,6 +513,8 @@ protected:
             opt.c_oflag &= ~OPOST;
             opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
             opt.c_cflag &= ~(CSIZE | PARENB);
+            opt.c_cc[VMIN] = 0;
+            opt.c_cc[VTIME] = 0;
 
             // hardware flow control
             version (OSX)
@@ -650,9 +673,20 @@ public:
         _readTimeoutMult = Duration.zero;
         updateTimeouts();
 
+        version (Posix)
+        {
+            auto last = getCC();
+            setCC([0,0]);
+        }
+
         void[] tmp;
         do tmp = read(buf, CanRead.zero);
         while (tmp.length);
+
+        version (Posix)
+        {
+            setCC(last);
+        }
 
         _readTimeout = rt;
         _readTimeoutMult = rtm;
