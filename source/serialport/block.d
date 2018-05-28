@@ -43,10 +43,9 @@ public:
             enum US_PER_MS = 1000;
             ctm.tv_usec = cast(int)(ttm.split().msecs * US_PER_MS);
 
-            auto lastCC = getCC();
-
             if (cr == CanRead.allOrNothing)
-                setCC([cast(ubyte)max(buf.length, 255), 0]);
+                setCC([cast(ubyte)min(buf.length, 255), 0]);
+            else setCC([1, 0]);
 
             const rv = select(_handle + 1, &sset, null, null, &ctm);
             if (rv == -1)
