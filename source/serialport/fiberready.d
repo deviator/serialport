@@ -66,14 +66,16 @@ public:
     void sleepFunc(SleepFunc dlg) @property
     { _sleepFunc = cast(void delegate(Duration) @nogc)dlg; }
 
+    ///
     deprecated("sleep function must be @nogc")
     void sleepFunc(void function(Duration) fnc) @property
     { _sleepFunc = (d){ (cast(void function(Duration) @nogc)fnc)(d); }; }
 
-    /// ditto
+    /// extended delegate for perform sleep
     void sleepFunc(void delegate(Duration) @nogc dlg) @property
     { _sleepFunc = dlg; }
 
+    /// ditto
     void sleepFunc(void function(Duration) @nogc fnc) @property
     { _sleepFunc = (d){ fnc(d); }; }
 
