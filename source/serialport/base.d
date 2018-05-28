@@ -481,9 +481,8 @@ protected:
                 throwSysCallException(port, "open", errno);
         }
 
-        /++ Set termios.c_cc[VMIN] and .c_cc[VMAX]
-         +/
-        void setCC(ubyte[2] val)
+        /// Set termios.c_cc[VMIN] and .c_cc[VMAX]
+        void setCC(ubyte[2] val) @nogc
         {
             termios opt;
             m_tcgetattr(&opt);
@@ -492,7 +491,8 @@ protected:
             m_tcsetattr(TCSADRAIN, &opt);
         }
 
-        ubyte[2] getCC()
+        /// Get termios.c_cc[VMIN] and .c_cc[VMAX]
+        ubyte[2] getCC() @nogc
         {
             ubyte[2] ret;
             termios opt;

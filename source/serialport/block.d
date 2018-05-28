@@ -43,6 +43,11 @@ public:
             enum US_PER_MS = 1000;
             ctm.tv_usec = cast(int)(ttm.split().msecs * US_PER_MS);
 
+            auto lastCC = getCC();
+
+            if (cr == CanRead.allOrNothing)
+                setCC([cast(ubyte)max(buf.length, 255), 0]);
+
             const rv = select(_handle + 1, &sset, null, null, &ctm);
             if (rv == -1)
                 throwSysCallException(port, "select", errno);
@@ -50,6 +55,9 @@ public:
             ssize_t res = 0;
             if (rv)
             {
+                // TODO: maybe Thread.sleep(1.msecs) ?
+                // because select returns when data is available
+                // but available is not full receive
                 res = posixRead(handle, buf.ptr, buf.length);
                 if (res < 0)
                     throwReadException(port, "posix read", errno);
@@ -130,6 +138,8 @@ protected:
 
             if (fcntl(_handle, F_SETFL, 0) == -1)  // disable O_NONBLOCK
                 throwSysCallException(port, "fcntl", errno);
+
+            setCC([1,0]);
 
             initialConfig(conf);
         }
