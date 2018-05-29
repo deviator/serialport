@@ -181,12 +181,13 @@ unittest
     utCall!fiberTest("fiber test", cp.ports);
     utCall!fiberTest2("fiber test 2", cp.ports);
     utCall!readTimeoutTest("read timeout test", cp.ports);
-    utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=zero", cp.ports, SerialPort.CanRead.zero);
-    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=zero", cp.ports, SerialPort.CanRead.zero);
-    utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
-    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
-    utCall!(readTimeoutTestConfig!SerialPortFR)( "read timeout test for FR  cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
-    utCall!(readTimeoutTestConfig!SerialPortBlk)("read timeout test for Blk cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
+    alias rttc = readTimeoutTestConfig;
+    utCall!(rttc!SerialPortFR)( "read timeout test for FR  cr=zero", cp.ports, SerialPort.CanRead.zero);
+    utCall!(rttc!SerialPortBlk)("read timeout test for Blk cr=zero", cp.ports, SerialPort.CanRead.zero);
+    utCall!(rttc!SerialPortFR)( "read timeout test for FR  cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
+    utCall!(rttc!SerialPortBlk)("read timeout test for Blk cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
+    utCall!(rttc!SerialPortFR)( "read timeout test for FR  cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
+    utCall!(rttc!SerialPortBlk)("read timeout test for Blk cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
     utCall!(fiberSleepFuncTest)("fiber sleep func test", cp.ports);
 }
 
@@ -217,13 +218,13 @@ void threadTest(SPT)(string[2] ports)
         com.set(1200);
         assert(com.config.baudRate == 1200);
 
-        com.baudRate = 38400;
-        assert(com.config.baudRate == 38400);
+        com.baudRate = 38_400;
+        assert(com.config.baudRate == 38_400);
 
         bool work = true;
         com.readTimeout = 1000.msecs;
 
-        bool needRead = false;
+        bool needRead;
 
         while (work)
         {
@@ -271,39 +272,30 @@ void threadTest(SPT)(string[2] ports)
 
     auto t = spawnLinked(&echoThread, ports[1]);
 
-    auto com = new SPT(ports[0], 19200);
+    auto com = new SPT(ports[0], 19_200);
     com.flush();
 
-    assert(com.baudRate == 19200);
+    assert(com.baudRate == 19_200);
     assert(com.dataBits == DataBits.data8);
     assert(com.parity == Parity.none);
     assert(com.stopBits == StopBits.one);
 
-    assert(com.config.baudRate == 19200);
+    assert(com.config.baudRate == 19_200);
     assert(com.config.dataBits == DataBits.data8);
     assert(com.config.parity == Parity.none);
     assert(com.config.stopBits == StopBits.one);
 
     scope (exit) com.close();
 
-    enum NN = BUFFER_SIZE / 2;
-
-    enum origList = [
-        "one",
-        "one two",
-        "one two three",
-        "x".repeat(NN).join
-    ];
-
     string[] list;
 
-    auto sets = [
-        SPConfig(38400),
+    const sets = [
+        SPConfig(38_400),
         SPConfig(2400),
         SPConfig.parse("19200:8N2"),
     ];
 
-    auto cfg = SPConfig(38400);
+    auto cfg = SPConfig(38_400);
     com.config = cfg;
     send(t, cfg);
 
@@ -361,7 +353,7 @@ void testNonBlock(string[2] ports)
         void[1024] buffer = void;
         size_t readed;
 
-        auto sw = StopWatch(AutoStart.yes);
+        const sw = StopWatch(AutoStart.yes);
 
         // flush
         while (sw.peek < 10.msecs)
@@ -378,7 +370,7 @@ void testNonBlock(string[2] ports)
         Thread.sleep(200.msecs);
     }
 
-    auto com = new SerialPortNonBlk(ports[0], 38400, "8N1");
+    auto com = new SerialPortNonBlk(ports[0], 38_400, "8N1");
     scope (exit) com.close();
 
     spawnLinked(&thfunc, ports[1]);
@@ -410,6 +402,8 @@ class CF : Fiber
         this.com = com;
         this.com.flush();
         this.data = new void[bufsize];
+        foreach (ref v; cast(ubyte[])data)
+            v = cast(ubyte)uniform(0, 128);
         super(&run);
     }
 
@@ -430,7 +424,7 @@ class CFSlave : CF
     {
         testPrint("start read loop");
         result = com.readContinues(data, readTimeout, readGapTimeout);
-        testPrint("finish read loop");
+        testPrint("finish read loop ("~result.length.to!string~")");
     }
 }
 
@@ -441,15 +435,11 @@ class CFMaster : CF
     Duration writeTimeout = 20.msecs;
 
     this(SerialPortFR com, size_t bufsize)
-    {
-        super(com, bufsize);
-        foreach (ref v; cast(ubyte[])data)
-            v = uniform(ubyte(0), ubyte(128));
-    }
+    { super(com, bufsize); }
 
     override void run()
     {
-        testPrint("start write loop");
+        testPrint("start write loop ("~data.length.to!string~")");
         com.writeTimeout = writeTimeout;
         com.write(data);
         testPrint("finish write loop");
@@ -489,7 +479,8 @@ void fiberTest(string[2] ports)
 
 void fiberTest2(string[2] ports)
 {
-    string mode = "38400:8N1";
+    // on CP2102 not work if baud > 9600
+    string mode = "9600:8N1";
 
     auto scom = new SerialPortFR(ports[0], 9600, "8N1");
     auto mcom = new SerialPortFR(ports[1], "19200:8N1");
@@ -504,13 +495,13 @@ void fiberTest2(string[2] ports)
     scom.flush();
     mcom.flush();
 
+    scom.config = mcom.config;
+
     scom.readTimeout = 1000.msecs;
     mcom.writeTimeout = 100.msecs;
 
-    version (OSX)
-        enum BS = BUFFER_SIZE / 2;
-    else
-        enum BS = BUFFER_SIZE * 4;
+    version (OSX) enum BS = BUFFER_SIZE / 2;
+    else          enum BS = BUFFER_SIZE * 4;
 
     auto slave  = new CFSlave(scom,  BS);
     auto master = new CFMaster(mcom, BS);
@@ -519,15 +510,17 @@ void fiberTest2(string[2] ports)
     {
         bool work = true;
         int step;
+        alias TERM = Fiber.State.TERM;
         while (work)
         {
-            if (master.state != Fiber.State.TERM) master.call;
-            Thread.sleep(20.msecs);
-            if (slave.state != Fiber.State.TERM) slave.call;
+            if (master.state != TERM) master.call;
+            Thread.sleep(5.msecs);
+            if (slave.state != TERM) slave.call;
 
             step++;
-            if (slave.result.length == master.data.length)
+            if (master.state == TERM && slave.state == TERM)
             {
+                assert(slave.result.length == master.data.length);
                 import std.algorithm : equal;
                 enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
                 work = false;
@@ -541,17 +534,16 @@ void fiberTest2(string[2] ports)
 
 void readTimeoutTest(string[2] ports)
 {
-    string mode = "19200:8N1";
     void[1024] buffer = void;
 
-    auto comA = new SerialPortFR(ports[0], 19200);
+    auto comA = new SerialPortFR(ports[0], 19_200);
     scope (exit) comA.close();
     comA.flush();
     assertThrown!TimeoutException(comA.readContinues(buffer[], 1.msecs, 1.msecs));
     assertThrown!TimeoutException(comA.read(buffer[]));
     assertThrown!TimeoutException(comA.read(buffer[], comA.CanRead.anyNonZero));
 
-    auto comB = new SerialPortBlk(ports[1], 19200, "8N1");
+    auto comB = new SerialPortBlk(ports[1], 19_200, "8N1");
     scope (exit) comB.close();
     comB.flush();
     comB.readTimeout = 1.msecs;
@@ -585,7 +577,7 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, SerialPort.CanRead 
     void[FULL] buffer = void;
     void[] data;
 
-    auto t = spawnLinked(&thfunc, ports[1]);
+    spawnLinked(&thfunc, ports[1]);
 
     Thread.sleep(rt);
 
@@ -611,9 +603,10 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, SerialPort.CanRead 
 void fiberSleepFuncTest(string[2] ports)
 {
     import std.datetime.stopwatch;
+
     static void sf(Duration d) @nogc
     {
-        auto sw = StopWatch(AutoStart.yes);
+        const sw = StopWatch(AutoStart.yes);
         if (auto f = Fiber.getThis)
             while (sw.peek < d) f.yield();
         else Thread.sleep(d);
@@ -624,7 +617,7 @@ void fiberSleepFuncTest(string[2] ports)
     size_t sf2_cnt;
     void sf2(Duration d) @nogc
     {
-        auto sw = StopWatch(AutoStart.yes);
+        const sw = StopWatch(AutoStart.yes);
         if (auto f = Fiber.getThis)
             while (sw.peek < d)
             {
