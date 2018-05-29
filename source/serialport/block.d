@@ -38,10 +38,11 @@ public:
 
             ssize_t res = 0;
             auto ttm = buf.length * readTimeoutMult + readTimeout;
-            const sw = StopWatch(AutoStart.yes);
+            auto sw = StopWatch(AutoStart.yes);
             while (ttm > Duration.zero)
             {
                 ttm -= sw.peek;
+                sw.reset();
 
                 fd_set sset;
                 FD_ZERO(&sset);
