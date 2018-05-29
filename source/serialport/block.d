@@ -32,34 +32,35 @@ public:
 
         version (Posix)
         {
-            fd_set sset;
-            FD_ZERO(&sset);
-            FD_SET(_handle, &sset);
-
-            Duration ttm = buf.length * readTimeoutMult + readTimeout;
-
-            timeval ctm;
-            ctm.tv_sec = cast(int)(ttm.total!"seconds");
-            enum US_PER_MS = 1000;
-            ctm.tv_usec = cast(int)(ttm.split().msecs * US_PER_MS);
-
             if (cr == CanRead.allOrNothing)
                 setCC([cast(ubyte)min(buf.length, 255), 0]);
             else setCC([1, 0]);
 
-            const rv = select(_handle + 1, &sset, null, null, &ctm);
-            if (rv == -1)
-                throwSysCallException(port, "select", errno);
-            
             ssize_t res = 0;
-            if (rv)
+            auto ttm = buf.length * readTimeoutMult + readTimeout;
+            const sw = StopWatch(AutoStart.yes);
+            while (ttm > Duration.zero)
             {
-                // TODO: maybe Thread.sleep(1.msecs) ?
-                // because select returns when data is available
-                // but available is not full receive
-                res = posixRead(handle, buf.ptr, buf.length);
-                if (res < 0)
-                    throwReadException(port, "posix read", errno);
+                ttm -= sw.peek;
+
+                fd_set sset;
+                FD_ZERO(&sset);
+                FD_SET(_handle, &sset);
+
+                timeval ctm;
+                ctm.tv_sec = cast(int)(ttm.total!"seconds");
+                enum US_PER_MS = 1000;
+                ctm.tv_usec = cast(int)(ttm.split().msecs * US_PER_MS);
+
+                const rv = select(_handle + 1, &sset, null, null, &ctm);
+                if (rv < 0) throwSysCallException(port, "select", errno);
+
+                if (rv == 0) break;
+
+                const r = posixRead(_handle, buf.ptr+res, buf.length-res);
+                if (r < 0) throwReadException(port, "posix read", errno);
+                res += r;
+                if (res == buf.length) return buf;
             }
         }
         else
