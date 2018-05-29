@@ -119,7 +119,7 @@ public:
 
     /++ Returns extend mode string (example: "/dev/ttyUSB0:38400:8N1")
      +/
-    override string toString() { return port ~ modeSplitChar ~ config.mode; }
+    override string toString() const { return port ~ modeSplitChar ~ config.mode; }
 
     /++ Set config value
         Params:
@@ -666,8 +666,8 @@ public:
     void flush()
     {
         void[128] buf = void;
-        auto rt = _readTimeout;
-        auto rtm = _readTimeoutMult;
+        const rt = _readTimeout;
+        const rtm = _readTimeoutMult;
 
         _readTimeout = 10.msecs;
         _readTimeoutMult = Duration.zero;
@@ -675,7 +675,7 @@ public:
 
         version (Posix)
         {
-            auto last = getCC();
+            const last = getCC();
             setCC([0,0]);
         }
 
