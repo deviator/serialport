@@ -182,12 +182,19 @@ unittest
     utCall!fiberTest2("fiber test 2", cp.ports);
     utCall!readTimeoutTest("read timeout test", cp.ports);
     alias rttc = readTimeoutTestConfig;
+    alias rttc2 = readTimeoutTestConfig2;
     utCall!(rttc!SerialPortFR)( "read timeout test for FR  cr=zero", cp.ports, SerialPort.CanRead.zero);
     utCall!(rttc!SerialPortBlk)("read timeout test for Blk cr=zero", cp.ports, SerialPort.CanRead.zero);
     utCall!(rttc!SerialPortFR)( "read timeout test for FR  cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
     utCall!(rttc!SerialPortBlk)("read timeout test for Blk cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
     utCall!(rttc!SerialPortFR)( "read timeout test for FR  cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
     utCall!(rttc!SerialPortBlk)("read timeout test for Blk cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
+    utCall!(rttc2!SerialPortFR)( "read timeout test 2 for FR  cr=zero", cp.ports, SerialPort.CanRead.zero);
+    utCall!(rttc2!SerialPortBlk)("read timeout test 2 for Blk cr=zero", cp.ports, SerialPort.CanRead.zero);
+    utCall!(rttc2!SerialPortFR)( "read timeout test 2 for FR  cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
+    utCall!(rttc2!SerialPortBlk)("read timeout test 2 for Blk cr=anyNonZero", cp.ports, SerialPort.CanRead.anyNonZero);
+    utCall!(rttc2!SerialPortFR)( "read timeout test 2 for FR  cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
+    utCall!(rttc2!SerialPortBlk)("read timeout test 2 for Blk cr=allOrNothing", cp.ports, SerialPort.CanRead.allOrNothing);
     utCall!(fiberSleepFuncTest)("fiber sleep func test", cp.ports);
 }
 
@@ -415,7 +422,7 @@ class CFSlave : CF
     void[] result;
 
     Duration readTimeout = 40.msecs;
-    Duration readGapTimeout = 10.msecs;
+    Duration readGapTimeout = 100.msecs;
 
     this(SerialPortFR com, size_t bufsize)
     { super(com, bufsize); }
@@ -479,7 +486,6 @@ void fiberTest(string[2] ports)
 
 void fiberTest2(string[2] ports)
 {
-    // on CP2102 not work if baud > 9600
     string mode = "9600:8N1";
 
     auto scom = new SerialPortFR(ports[0], 9600, "8N1");
@@ -564,7 +570,6 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, SerialPort.CanRead 
         com.flush();
         scope (exit) com.close();
         com.write(SEND);
-        Thread.sleep(1.seconds);
     }
 
     auto com = new SP(ports[0], mode);
@@ -594,6 +599,58 @@ void readTimeoutTestConfig(SP : SerialPort)(string[2] ports, SerialPort.CanRead 
         assertNotThrown(data = com.read(buffer, cr));
         assertNotThrown(data = com.read(buffer, cr));
         assertNotThrown(data = com.read(buffer, cr));
+    }
+    else assert(0, "not tested variant of CanRead");
+
+    receive((LinkTerminated e) { });
+}
+
+void readTimeoutTestConfig2(SP : SerialPort)(string[2] ports, SerialPort.CanRead cr)
+{
+    enum mode = "38400:8N1";
+
+    static void thfunc(string port)
+    {
+        auto com = new SP(port, mode);
+        scope (exit) com.close();
+        com.flush();
+        Thread.sleep(200.msecs);
+        com.write("one");
+        Thread.sleep(200.msecs);
+        com.write("two");
+    }
+
+    auto com = new SP(ports[0], mode);
+    scope (exit) com.close();
+    com.readTimeout = cr == SerialPort.CanRead.zero ? 90.msecs : 300.msecs;
+    com.flush();
+
+    void[6] buffer = void;
+    void[] data;
+
+    spawnLinked(&thfunc, ports[1]);
+
+    if (cr == SerialPort.CanRead.anyNonZero)
+    {
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "one");
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "two");
+    }
+    else if (cr == SerialPort.CanRead.allOrNothing)
+        assertThrown!TimeoutException(data = com.read(buffer));
+    else if (cr == SerialPort.CanRead.zero)
+    {
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "");
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "");
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "one");
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "");
+        assertNotThrown(data = com.read(buffer, cr));
+        assert(cast(string)data == "two");
     }
     else assert(0, "not tested variant of CanRead");
 
