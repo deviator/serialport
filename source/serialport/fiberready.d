@@ -145,7 +145,7 @@ public:
         if (closed) throwPortClosedException(port);
 
         size_t res;
-        const timeout = buf.length * writeTimeoutMult + writeTimeout;
+        const timeout = buf.length * readTimeoutMult + readTimeout;
         const pause = ioPause();
         const sw = StopWatch(AutoStart.yes);
         while (sw.peek < timeout)
