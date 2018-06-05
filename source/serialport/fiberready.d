@@ -31,7 +31,7 @@ protected:
             else
             {
                 const tm = StopWatch(AutoStart.yes);
-                while (tm.peek < dt) Fiber.yield();
+                do Fiber.yield(); while (tm.peek < dt);
             }
         }
     }
