@@ -202,8 +202,9 @@ unittest
 {
     enum name = "/some/path/to/notexisting/device";
     auto e = enforce(collectException(new SerialPortBlk(name, 19200)), "exception not thrown");
-    assert (cast(SysCallException)e !is null);
-    assert (e.msg.startsWith("call 'open' (%s) failed: error 2".format(name)), "wrong msg");
+    auto sce = cast(SysCallException)e;
+    assert (sce !is null);
+    assert (e.msg.startsWith(format!"call 'open' (%s) failed: error %d"(name, sce.err)), "wrong msg");
 }
 
 void testPrint(Args...)(Args args) { stderr.write("    "); stderr.writeln(args); }
