@@ -83,6 +83,7 @@ private enum fmtSPSCEMsgFmt = "call '%s' (%s) failed: error %d";
 private string fmtSPSCEMsg(string port, string fnc, int err) @nogc
 {
     import core.stdc.stdio : sprintf;
+    import std.algorithm : min;
     import core.stdc.string : memcpy, memset;
 
     enum SZ = 256;
