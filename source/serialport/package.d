@@ -150,7 +150,7 @@ ComPipe getPlatformComPipe(int bufsz)
 }
 
 // real test main
-//version (realtest)
+version (realtest)
 unittest
 {
     stderr.writeln("=== start real test ===\n");
@@ -204,7 +204,20 @@ unittest
     auto e = enforce(collectException(new SerialPortBlk(name, 19200)), "exception not thrown");
     auto sce = cast(SysCallException)e;
     assert (sce !is null);
-    assert (e.msg.startsWith(format!"call 'open' (%s) failed: error %d"(name, sce.err)), "wrong msg");
+    assert (sce.port == name, "wrong name");
+    version (Posix)
+    {
+        assert(sce.fnc == "open", "'" ~ sce.fnc ~ "' is not 'open'");
+        assert(sce.err == 2, "unexpectable errno %d".format(sce.err));
+    }
+    auto exp = format!"call '%s' (%s) failed: error %d"(sce.fnc, name, sce.err);
+    if (!e.msg.startsWith(exp))
+    {
+        import std.stdio;
+        stderr.writeln("exp: ", exp);
+        stderr.writeln("msg: ", e.msg);
+        assert(0, "wrong msg");
+    }
 }
 
 void testPrint(Args...)(Args args) { stderr.write("    "); stderr.writeln(args); }
