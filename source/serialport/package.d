@@ -150,7 +150,7 @@ ComPipe getPlatformComPipe(int bufsz)
 }
 
 // real test main
-version (realtest)
+//version (realtest)
 unittest
 {
     stderr.writeln("=== start real test ===\n");
