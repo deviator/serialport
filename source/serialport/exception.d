@@ -63,37 +63,81 @@ private E setFields(E: SerialPortException)(E e, string port, string msg,
 import std.format;
 
 private enum preallocated;
+private enum prealloc_prefix = "prealloc";
 
-private mixin template throwSPEMix(E, string defaultMsg="")
+private mixin template throwSPEMix(E)
     if (is(E: SerialPortException))
 {
     enum name = E.stringof;
     mixin(`
-    @preallocated
-    private %1$s %3$s%1$s;
-    void throw%1$s(string port, string msg="%2$s",
-                    string file=__FILE__, size_t line=__LINE__) @nogc
-    { throw %3$s%1$s.setFields(port, msg, file, line); }
-    `.format(name, defaultMsg, "prealloc")
+    @preallocated private %1$s %2$s%1$s;
+    void throw%1$s(string port, string msg="",
+                   string file=__FILE__, size_t line=__LINE__) @nogc
+    { throw %2$s%1$s.setFields(port, msg, file, line); }
+    `.format(name, prealloc_prefix)
     );
 }
 
-private mixin template throwSPSCEMix(E, string defaultMsg="")
+private enum fmtSPSCEMsgFmt = "call '%s' (%s) failed: error %d";
+
+private string fmtSPSCEMsg(string port, string fnc, int err) @nogc
+{
+    import core.stdc.stdio : sprintf;
+    import core.stdc.string : memcpy, memset;
+
+    enum SZ = 256;
+
+    static char[SZ] port_buf;
+    static char[SZ] fnc_buf;
+    static char[SZ*3] buf;
+
+    memset(port_buf.ptr, 0, SZ);
+    memset(fnc_buf.ptr, 0, SZ);
+    memset(buf.ptr, 0, SZ*3);
+    memcpy(port_buf.ptr, port.ptr, min(port.length, SZ));
+    memcpy(fnc_buf.ptr, fnc.ptr, min(fnc.length, SZ));
+    auto n = sprintf(buf.ptr, fmtSPSCEMsgFmt, fnc_buf.ptr, port_buf.ptr, err);
+    return cast(string)buf[0..n];
+}
+
+unittest
+{
+    import std.format : format;
+
+    static auto fmtSPSCEMsgGC(string port, string fnc, int err)
+    { return format!fmtSPSCEMsgFmt(fnc, port, err); }
+
+    void test(string port, string fnc, int err)
+    {
+        auto trg = fmtSPSCEMsg(port, fnc, err);
+        auto tst = fmtSPSCEMsgGC(port, fnc, err);
+        if (trg != tst) assert(0, "not equals:\n%s\n%s".format(trg, tst));
+    }
+
+    test("/dev/ttyUSB0", "open", 2);
+    test("/very/very/very/very/very/very/very/very/very/very/big/path/to/com/port/device/dev",
+         "veryVeryVeryVeryLongFunctionName12345678901234567890123456789012345678901234567890",
+         int.max);
+    test("", "", 0);
+}
+
+private mixin template throwSPSCEMix(E)
     if (is(E: SysCallException))
 {
     enum name = E.stringof;
     mixin(`
-    @preallocated
-    private %1$s %3$s%1$s;
-    void throw%1$s(string port, string fnc, int err, string msg="%2$s",
+    @preallocated private %1$s %2$s%1$s;
+    void throw%1$s(string port, string fnc, int err, string msg="",
                     string file=__FILE__, size_t line=__LINE__) @nogc
     { 
-        auto e = %3$s%1$s.setFields(port, msg, file, line);
+        if (msg.length == 0)
+            msg = fmtSPSCEMsg(port, fnc, err);
+        auto e = %2$s%1$s.setFields(port, msg, file, line);
         e.fnc = fnc;
         e.err = err;
         throw e;
     }
-    `.format(name, defaultMsg, "prealloc")
+    `.format(name, prealloc_prefix)
     );
 }
 
@@ -105,7 +149,7 @@ static this()
 }
 
 mixin throwSPEMix!SerialPortException;
-mixin throwSPEMix!(PortClosedException, "port closed");
+mixin throwSPEMix!PortClosedException;
 mixin throwSPEMix!TimeoutException;
 
 mixin throwSPSCEMix!SysCallException;
