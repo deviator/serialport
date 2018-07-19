@@ -65,16 +65,16 @@ import std.format;
 private enum preallocated;
 private enum prealloc_prefix = "prealloc";
 
-private mixin template throwSPEMix(E)
+private mixin template throwSPEMix(E, string defaultMsg="")
     if (is(E: SerialPortException))
 {
-    enum name = E.stringof;
+    enum string name = E.stringof;
     mixin(`
     @preallocated private %1$s %2$s%1$s;
-    void throw%1$s(string port, string msg="",
+    void throw%1$s(string port, string msg="%3$s",
                    string file=__FILE__, size_t line=__LINE__) @nogc
     { throw %2$s%1$s.setFields(port, msg, file, line); }
-    `.format(name, prealloc_prefix)
+    `.format(name, prealloc_prefix, (defaultMsg.length ? defaultMsg : name))
     );
 }
 
