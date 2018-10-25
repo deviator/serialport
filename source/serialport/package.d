@@ -645,7 +645,7 @@ void readTimeoutTestConfig2(SP : SerialPort)(string[2] ports, SerialPort.CanRead
 
     auto com = new SP(ports[0], mode);
     scope (exit) com.close();
-    com.readTimeout = cr == SerialPort.CanRead.zero ? 10.msecs : 300.msecs;
+    com.readTimeout = cr == SerialPort.CanRead.zero ? 10.msecs : 500.msecs;
     com.flush();
 
     void[6] buffer = void;
