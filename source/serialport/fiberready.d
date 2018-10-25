@@ -174,22 +174,23 @@ public:
         Sleep time calculates from baud rate and count of bits in one byte.
 
         -------
-        ---|-----|-----|------------|-----|------------> t
-         call    |     |            |     |
-        readAll  |     |            |     |
-           |     |     |            |     |
-           |     |<---------data receive---------->|
-           |     |=== =====   ======|     |   |== =|
-           |     |     |  |   |     |     |
-           |<-timeout->|  |   |     |     |
-           |     |<-1->|  |<2>|     |<-3->|
-           |     |                  |     |
-           |     |<---readedData--->|     |
-           |                            return
-           |<------readAll work time----->|
+        ------|--------|-----|------------|-----|------------> t
+            call       |     |            |     |
+        readContinues  |     |            |     |
+              |        |     |            |     |
+              |        |<---------data receive---------->|
+              |        |=== =====   ======|     |   |== =| data stream
+              |        |     |  |   |     |     |
+              |<--timeout--->|  |   |     |     |
+              |        |<-1->|  |<2>|     |<-3->|
+              |        |                  |     |
+              |        |<---readedData--->|     |
+              |                               return
+              |<-------readAll work time------->|
         
         (1) if readedData.length > 0 then continue reading
-            else throw TimeoutException
+            else if expectAnything throw TimeoutException
+            else return readedData (empty)
         (2) silent time, if silent < frameGap then continue reading
         (3) else if silent > frameGap then stop reading
             and return readedData
@@ -199,6 +200,8 @@ public:
             buf = buffer for reading
             startTimeout = timeout for first byte recive
             frameGap = detect new data frame by silence period
+            expectAnything = function throw exception if no data
+                              before startTimeout
 
         Returns: slice of buf with readed data
 
@@ -210,7 +213,8 @@ public:
         See_Also: SerialPort.read
      +/
     void[] readContinues(void[] buf, Duration startTimeout=1.seconds,
-                                     Duration frameGap=50.msecs)
+                                     Duration frameGap=50.msecs,
+                                     bool expectAnything=true)
     {
         if (closed) throwPortClosedException(port);
 
@@ -244,7 +248,12 @@ public:
             }
 
             if (readed == 0 && full.peek > startTimeout)
-                throwTimeoutException(port, "read timeout");
+            {
+                if (expectAnything)
+                    throwTimeoutException(port, "read timeout");
+                else
+                    return buf[0..0];
+            }
 
             this.sleep(pause);
         }
