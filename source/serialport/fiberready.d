@@ -23,17 +23,8 @@ protected:
      +/
     void sleep(Duration dt) @nogc
     {
-        if (_sleepFunc !is null) _sleepFunc(dt);
-        else
-        {
-            import core.thread : Fiber, Thread;
-            if (Fiber.getThis is null) Thread.sleep(dt);
-            else
-            {
-                const tm = StopWatch(AutoStart.yes);
-                do Fiber.yield(); while (tm.peek < dt);
-            }
-        }
+        if (_sleepFunc is null) msleep(dt);
+        else _sleepFunc(dt);
     }
 
     /++ Calc pause for sleep in read and write loops

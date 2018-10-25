@@ -3,6 +3,19 @@ module serialport.util;
 import std.range;
 import std.algorithm;
 
+import std.datetime.stopwatch;
+
+void msleep(Duration dt) @nogc
+{
+    import core.thread : Fiber, Thread;
+    if (Fiber.getThis is null) Thread.sleep(dt);
+    else
+    {
+        const tm = StopWatch(AutoStart.yes);
+        do Fiber.yield(); while (tm.peek < dt);
+    }
+}
+
 package bool hasFlag(A,B)(A a, B b) @property { return (a & b) == b; }
 
 struct Pair(A,B) { A a; B b; }
