@@ -34,6 +34,10 @@ d:
   - ldc-1.10.0
   - ldc-1.9.0
 
+matrix:
+  allow_failures:
+    - d: dmd-nightly
+
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
 
