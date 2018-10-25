@@ -637,15 +637,15 @@ void readTimeoutTestConfig2(SP : SerialPort)(string[2] ports, SerialPort.CanRead
         auto com = new SP(port, mode);
         scope (exit) com.close();
         com.flush();
-        Thread.sleep(100.msecs);
+        Thread.sleep(200.msecs);
         com.write("one");
-        Thread.sleep(100.msecs);
+        Thread.sleep(200.msecs);
         com.write("two");
     }
 
     auto com = new SP(ports[0], mode);
     scope (exit) com.close();
-    com.readTimeout = cr == SerialPort.CanRead.zero ? 10.msecs : 150.msecs;
+    com.readTimeout = cr == SerialPort.CanRead.zero ? 10.msecs : 300.msecs;
     com.flush();
 
     void[6] buffer = void;
@@ -666,12 +666,12 @@ void readTimeoutTestConfig2(SP : SerialPort)(string[2] ports, SerialPort.CanRead
     {
         assertNotThrown(data = com.read(buffer, cr));
         assert(cast(string)data == "");
-        Thread.sleep(150.msecs);
+        Thread.sleep(300.msecs);
         assertNotThrown(data = com.read(buffer, cr));
         assert(cast(string)data == "one");
         assertNotThrown(data = com.read(buffer, cr));
         assert(cast(string)data == "");
-        Thread.sleep(100.msecs);
+        Thread.sleep(200.msecs);
         assertNotThrown(data = com.read(buffer, cr));
         assert(cast(string)data == "two");
         assertNotThrown(data = com.read(buffer, cr));
