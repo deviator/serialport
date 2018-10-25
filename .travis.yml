@@ -37,6 +37,9 @@ d:
 matrix:
   allow_failures:
     - d: dmd-nightly
+      os: linux
+    - d: dmd-nightly
+      os: osx
 
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
