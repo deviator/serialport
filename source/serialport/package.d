@@ -213,7 +213,7 @@ unittest
     auto exp = format!"call '%s' (%s) failed: error %d"(sce.fnc, name, sce.err);
     if (!e.msg.startsWith(exp))
     {
-        import std.stdio;
+        import std.stdio : stderr;
         stderr.writeln("exp: ", exp);
         stderr.writeln("msg: ", e.msg);
         assert(0, "wrong msg");
@@ -369,7 +369,7 @@ void threadTest(SPT)(string[2] ports)
 
 void testNonBlock(string[2] ports)
 {
-    import std.datetime.stopwatch;
+    import std.datetime.stopwatch : StopWatch, AutoStart;
     enum mode = "38400:8N1";
 
     const data = "1234567890987654321qazxswedcvfrtgbnhyujm,ki";
@@ -568,6 +568,7 @@ void readTimeoutTest(string[2] ports)
     scope (exit) comA.close();
     comA.flush();
     assertThrown!TimeoutException(comA.readContinues(buffer[], 1.msecs, 1.msecs));
+    assertNotThrown!TimeoutException(comA.readContinues(buffer[], 1.msecs, 1.msecs, false));
     assertThrown!TimeoutException(comA.read(buffer[]));
     assertThrown!TimeoutException(comA.read(buffer[], comA.CanRead.anyNonZero));
 
@@ -683,7 +684,7 @@ void readTimeoutTestConfig2(SP : SerialPort)(string[2] ports, SerialPort.CanRead
 
 void fiberSleepFuncTest(string[2] ports)
 {
-    import std.datetime.stopwatch;
+    import std.datetime.stopwatch : StopWatch, AutoStart;
 
     static void sf(Duration d) @nogc
     {

@@ -24,7 +24,7 @@ auto pair(A,B)(A a, B b) { return Pair!(A,B)(a, b); }
 struct PairList(A,B)
 {
     Pair!(A,B)[] list;
-    this(Pair!(A,B)[] list) { this.list = list.dup; }
+    this(Pair!(A,B)[] list) { this.list = list; }
 
     @safe pure @nogc nothrow const
     {
@@ -89,8 +89,8 @@ unittest
 
 unittest
 {
-    import std.algorithm;
-    import std.string;
+    import std.algorithm : sum;
+    import std.string : join;
 
     immutable pl = pairList(
         pair(1, "hello"),
