@@ -64,8 +64,8 @@ Class `SerialPortBlk` provides blocking `read` and `write`.
 If you want use library in fibers it provides `SerialPortFR` (Fiber Ready),
 where `read` and `write` is loops: call non-blocking read and write and
 sleep between tries. Loops algorithms use `Fiber.yield` if available,
-or `Thread.yield` as failback. If you want redefine this behavior, you
-can set `void delegate(Duration) sleepFunc` field directly or through
+or `Thread.sleep` as failback. If you want redefine this behavior, you
+can set `void delegate(Duration) @nogc sleepFunc` field directly or through
 last parameter of ctor.
 
 `write` method of `SerialPort` can throw `TimeoutException` if it can't
@@ -93,7 +93,7 @@ Receive data time schema:
 
 where `readTimeoutSum = readTimeout + readTimeoutMult * dataBuffer.length;`
 
-if `CanReturn cr` flag is:
+if `CanRead cr` flag is:
 
 * `CanRead.allOrNothing`
 
@@ -103,7 +103,7 @@ if `CanReturn cr` flag is:
     else return readedData;
     ```
 
-* `CanReturn.anyNonZero`
+* `CanRead.anyNonZero`
 
     ```d
     if (readedData.length == 0)
@@ -111,7 +111,7 @@ if `CanReturn cr` flag is:
     else return readedData;
     ```
 
-* `CanReturn.zero`
+* `CanRead.zero`
 
     ```d
     return readedData;
@@ -119,28 +119,30 @@ if `CanReturn cr` flag is:
 
 ## `SerialPortFR.readContinues` method
 
-    void[] readContinues(void[] arr, Duration startTimeout=1.seconds, Duration frameGap=50.msecs)
+    void[] readContinues(void[] arr, Duration startTimeout=1.seconds, Duration frameGap=50.msecs, bool expectAnything=true)
 
 It reads in loop from serial port while silent time is less what `frameGap` and
-throws `TimeoutException` only if timeout is expires and no data was readed.
+throws `TimeoutException` only if timeout is expires when no data was readed and
+`expectAnything` flag is setted.
 
 ```
----|-----|-----|------------|-----|------------> t
- call    |     |            |     |
-readAll  |     |            |     |
-   |     |     |            |     |
-   |     |<---------data receive---------->|
-   |     |=== =====   ======|     |   |== =|
-   |     |     |  |   |     |     |
-   |<-timeout->|  |   |     |     |
-   |     |<-1->|  |<2>|     |<-3->|
-   |     |                  |     |
-   |     |<---readedData--->|     |
-   |                           return
-   |<------readAll work time----->|
+------|--------|-----|------------|-----|------------> t
+    call       |     |            |     |
+readContinues  |     |            |     |
+      |        |     |            |     |
+      |        |<---------data receive---------->|
+      |        |=== =====   ======|     |   |== =| data stream
+      |        |     |  |   |     |     |
+      |<--timeout--->|  |   |     |     |
+      |        |<-1->|  |<2>|     |<-3->|
+      |        |                  |     |
+      |        |<---readedData--->|     |
+      |                               return
+      |<-------readAll work time------->|
 
 (1) if readedData.length > 0 then continue reading
-    else throw TimeoutException
+    else if expectAnything throw TimeoutException
+    else return readedData (empty)
 (2) silent time, if silent < frameGap then continue reading
 (3) else if silent > frameGap then stop reading
     and return readedData
@@ -149,20 +151,13 @@ readAll  |     |            |     |
 It's useful if you don't know how much data can come:
 
 * allocate buffer for reading (4kB for example)
-* call `readAll` and get data frame
+* call `readContinues` and get data frame
 
 ## Warning
 
 **unix systems allow only standard speeds:**
 
 **[0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400]**
-
-At expiration of read timeout throws `TimeoutException` if no bytes readed.
-If readed bytes count != 0 wait frame end gap and if no new bytes return readed.
-
-Reading and writing loops algorithms use `Fiber.yield` if available,
-or `Thread.yield` otherwise. If you want redefine this behavior, you can set
-`void delegate() yieldFunc` field of `SerialPort` through ctor or directly.
 
 ## Tests
 
@@ -174,20 +169,13 @@ Two paired USB->UART (FTDI FT232RL) uses for tests on linux and windows.
 
 For linux and OSX tested (socat as tty pipe creator)
 
-* ldc
-* ldc-beta
-* ldc-1.8.0
-* dmd
-* dmd-nightly
-* dmd-2.079.1
-* dmd-2.078.3
+* dmd (from 2.79.1 to actual and nightly)
+* ldc (from 1.8.0 to actual and beta)
 
 For windows tested (build only, see [note](#note)) fox x86 and x64
 
-* dmd beta
-* dmd stable
-* ldc beta
-* ldc stable
+* dmd stable and nightly
+* ldc stable and beta
 
 See [.travis.yml](.travis.yml) [.appveyor.yml](.appveyor.yml)
 
