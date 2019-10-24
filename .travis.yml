@@ -23,6 +23,7 @@ d:
   - ldc-beta
   # used
   - dmd-2.082.1
+  - ldc-1.17.0
   - ldc-1.11.0
   # old
   - dmd-2.078.3
@@ -39,6 +40,10 @@ matrix:
     - d: dmd-nightly
       os: linux
     - d: dmd-nightly
+      os: osx
+    - d: ldc-beta
+      os: linux
+    - d: ldc-beta
       os: osx
 
 script: 
