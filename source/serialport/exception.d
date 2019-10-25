@@ -53,6 +53,8 @@ class WriteException : SysCallException
 private E setFields(E: SerialPortException)(E e, string port, string msg,
                                               string file, size_t line)
 {
+    if (e is null) // assert(0) not omit on optimize by compiler
+        assert(0, "setField get null exception object");
     e.port = port;
     e.msg = msg;
     e.file = file;
@@ -146,10 +148,27 @@ static this()
 {
     // can't use origin getSymbolsByUDA because
     // https://issues.dlang.org/show_bug.cgi?id=20054
-    // paste old impl at end of file
-    static if (__VERSION__ != 2088) import std.traits : getSymbolsByUDA;
-    static foreach (sym; getSymbolsByUDA!(mixin(__MODULE__), preallocated))
-        sym = new typeof(sym);
+    static if (__VERSION__ < 2088)
+    {
+        import std.traits : getSymbolsByUDA;
+        alias plist = getSymbolsByUDA!(mixin(__MODULE__), preallocated);
+    }
+    else
+    {
+        import std.meta : AliasSeq;
+
+        alias plist = AliasSeq!(
+            preallocSerialPortException,
+            preallocPortClosedException,
+            preallocTimeoutException,
+            preallocSysCallException,
+            preallocReadException,
+            preallocWriteException,
+            preallocUnsupported
+        );
+    }
+
+    static foreach (sym; plist) sym = new typeof(sym);
 }
 
 mixin throwSPEMix!SerialPortException;
@@ -159,7 +178,6 @@ mixin throwSPEMix!TimeoutException;
 mixin throwSPSCEMix!SysCallException;
 mixin throwSPSCEMix!ReadException;
 mixin throwSPSCEMix!WriteException;
-
 
 import serialport.types;
 import core.stdc.stdio;
@@ -210,68 +228,4 @@ void throwUnsupportedException(string port, Parity parity,
     }
     auto ln = sprintf(UEMPB.ptr, "unsupported parity: %s", str.ptr);
     throw preallocUnsupported.setFields(port, cast(immutable)UEMPB[0..ln], file, line);
-}
-
-static if (__VERSION__ == 2088)
-{
-    mixin(q{
-
-    // use old version of getSymbolsByUDA
-    private template getSymbolsByUDA(alias symbol, alias attribute)
-    {
-        import std.traits : hasUDA;
-        alias membersWithUDA = getSymbolsByUDAImpl!(symbol, attribute, __traits(allMembers, symbol));
-
-        // if the symbol itself has the UDA, tack it on to the front of the list
-        static if (hasUDA!(symbol, attribute))
-            alias getSymbolsByUDA = AliasSeq!(symbol, membersWithUDA);
-        else
-            alias getSymbolsByUDA = membersWithUDA;
-    }
-
-    private template getSymbolsByUDAImpl(alias symbol, alias attribute, names...)
-    {
-        import std.meta : Alias, AliasSeq, Filter;
-        static if (names.length == 0)
-        {
-            alias getSymbolsByUDAImpl = AliasSeq!();
-        }
-        else
-        {
-            alias tail = getSymbolsByUDAImpl!(symbol, attribute, names[1 .. $]);
-
-            // Filtering inaccessible members.
-            static if (!__traits(compiles, __traits(getMember, symbol, names[0])))
-            {
-                alias getSymbolsByUDAImpl = tail;
-            }
-            else
-            {
-                alias member = __traits(getMember, symbol, names[0]);
-
-                // Filtering not compiled members such as alias of basic types.
-                static if (!__traits(compiles, hasUDA!(member, attribute)))
-                {
-                    alias getSymbolsByUDAImpl = tail;
-                }
-                // Get overloads for functions, in case different overloads have different sets of UDAs.
-                else static if (isFunction!member)
-                {
-                    enum hasSpecificUDA(alias member) = hasUDA!(member, attribute);
-                    alias overloadsWithUDA = Filter!(hasSpecificUDA, __traits(getOverloads, symbol, names[0]));
-                    alias getSymbolsByUDAImpl = AliasSeq!(overloadsWithUDA, tail);
-                }
-                else static if (hasUDA!(member, attribute))
-                {
-                    alias getSymbolsByUDAImpl = AliasSeq!(member, tail);
-                }
-                else
-                {
-                    alias getSymbolsByUDAImpl = tail;
-                }
-            }
-        }
-    }
-    
-    });
 }

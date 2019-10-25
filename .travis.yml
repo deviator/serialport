@@ -3,33 +3,33 @@ sudo: required
 
 os:
   - linux
-  - osx
+
+git:
+  depth: 1
 
 addons:
   apt:
     packages:
       - socat
 
-before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install socat; fi
-
 language: d
 d:
   # actual
-  - dmd
-  - ldc
+  - dmd-2.088.1
+  - ldc-1.18.0
   # newer
   - dmd-nightly
   - ldc-beta
   # used
-  - dmd-2.082.1
+  - dmd-2.087.1
   - ldc-1.17.0
-  - ldc-1.11.0
   # old
   - dmd-2.078.3
   - ldc-1.8.0
   # other
+  - dmd-2.082.1
   - dmd-2.081.1
+  - ldc-1.11.0
   - dmd-2.080.1
   - dmd-2.079.1
   - ldc-1.10.0
@@ -39,12 +39,8 @@ matrix:
   allow_failures:
     - d: dmd-nightly
       os: linux
-    - d: dmd-nightly
-      os: osx
     - d: ldc-beta
       os: linux
-    - d: ldc-beta
-      os: osx
 
 script: 
   - dub test --compiler=${DC} --build=unittest-cov
