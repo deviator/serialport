@@ -147,7 +147,7 @@ static this()
     // can't use origin getSymbolsByUDA because
     // https://issues.dlang.org/show_bug.cgi?id=20054
     // paste old impl at end of file
-    static if (__VERSION__ < 2088) import std.traits : getSymbolsByUDA;
+    static if (__VERSION__ != 2088) import std.traits : getSymbolsByUDA;
     static foreach (sym; getSymbolsByUDA!(mixin(__MODULE__), preallocated))
         sym = new typeof(sym);
 }
@@ -212,8 +212,10 @@ void throwUnsupportedException(string port, Parity parity,
     throw preallocUnsupported.setFields(port, cast(immutable)UEMPB[0..ln], file, line);
 }
 
-static if (__VERSION__ >= 2088)
+static if (__VERSION__ == 2088)
 {
+    mixin(q{
+
     // use old version of getSymbolsByUDA
     private template getSymbolsByUDA(alias symbol, alias attribute)
     {
@@ -270,4 +272,6 @@ static if (__VERSION__ >= 2088)
             }
         }
     }
+    
+    });
 }
