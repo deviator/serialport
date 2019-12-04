@@ -405,7 +405,8 @@ void testNonBlock(string[2] ports)
 
 class CF : Fiber
 {
-    void[] data;
+    void[] responseData;
+    string messageData;
 
     SerialPortFR com;
 
@@ -413,8 +414,8 @@ class CF : Fiber
     {
         this.com = com;
         this.com.flush();
-        this.data = new void[bufsize];
-        foreach (ref v; cast(ubyte[])data)
+        this.responseData = new ubyte[bufsize];
+        foreach (ref v; cast(ubyte[])responseData)
             v = cast(ubyte)uniform(0, 128);
         super(&run);
     }
@@ -435,7 +436,7 @@ class CFSlave : CF
     override void run()
     {
         testPrint("start read loop");
-        result = com.readContinues(data, readTimeout, readGapTimeout);
+        result = com.readContinues(result, readTimeout, readGapTimeout);
         testPrint("finish read loop ("~result.length.to!string~")");
     }
 }
@@ -451,9 +452,9 @@ class CFMaster : CF
 
     override void run()
     {
-        testPrint("start write loop ("~data.length.to!string~")");
+        testPrint("start write loop ("~messageData.length.to!string~")");
         com.writeTimeout = writeTimeout;
-        com.write(data);
+        com.write(messageData);
         testPrint("finish write loop");
     }
 }
@@ -477,14 +478,14 @@ void fiberTest(string[2] ports)
         Thread.sleep(30.msecs);
         if (master.state == TERM && slave.state == TERM)
         {
-            if (slave.result.length == master.data.length)
+            if (slave.result.length == master.messageData.length)
             {
                 import std.algorithm : equal;
-                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
+                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.messageData));
                 work = false;
                 testPrint("basic loop steps: ", step);
             }
-            else throw new Exception(text(slave.result, " != ", master.data));
+            else throw new Exception(text(slave.result, " != ", master.messageData));
         }
     }
 }
@@ -531,9 +532,9 @@ void fiberTest2(string[2] ports)
             step++;
             if (master.state == TERM && slave.state == TERM)
             {
-                assert(slave.result.length == master.data.length);
+                assert(slave.result.length == master.messageData.length);
                 import std.algorithm : equal;
-                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
+                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.messageData));
                 work = false;
                 testPrint("basic loop steps: ", step);
             }
@@ -709,14 +710,14 @@ void fiberSleepFuncTest(string[2] ports)
         Thread.sleep(30.msecs);
         if (master.state == TERM && slave.state == TERM)
         {
-            if (slave.result.length == master.data.length)
+            if (slave.result.length == master.messageData.length)
             {
                 import std.algorithm : equal;
-                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.data));
+                enforce(equal(cast(ubyte[])slave.result, cast(ubyte[])master.messageData));
                 work = false;
                 testPrint("basic loop steps: ", step);
             }
-            else throw new Exception(text(slave.result, " != ", master.data));
+            else throw new Exception(text(slave.result, " != ", master.messageData));
         }
     }
 }

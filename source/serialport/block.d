@@ -77,7 +77,7 @@ public:
         return buf[0..res];
     }
 
-    override void write(const(void[]) arr)
+    override size_t write(string arr)
     {
         if (closed) throwPortClosedException(port);
 
@@ -88,26 +88,33 @@ public:
             const full = StopWatch(AutoStart.yes);
             while (written < arr.length)
             {
-                if (full.peek > ttm)
+                if (full.peek > ttm) {
                     throwTimeoutException(port, "write timeout");
+				}
 
                 const res = posixWrite(_handle, arr[written..$].ptr, arr.length - written);
 
-                if (res < 0)
+                if (res < 0) {
                     throwWriteException(port, "posix write", errno);
+				}
 
                 written += res;
             }
+            return written;
         }
         else
         {
             uint written;
 
-            if (!WriteFile(_handle, arr.ptr, cast(uint)arr.length, &written, null))
+            if (!WriteFile(_handle, arr.ptr, cast(uint)arr.length, &written, null)) {
                 throwWriteException(port, "win write", GetLastError());
+			}
 
-            if (arr.length != written)
+            if (arr.length != written) {
                 throwTimeoutException(port, "write timeout");
+			}
+ 
+            return written;
         }
     }
 
@@ -115,7 +122,7 @@ protected:
 
     override void[] m_read(void[]) @nogc
     { assert(0, "disable m_read for blocking"); }
-    override size_t m_write(const(void)[]) @nogc
+    override size_t m_write(string) @nogc
     { assert(0, "disable m_write for blocking"); }
 
     override void updateTimeouts() @nogc { version (Windows) updTimeouts(); }

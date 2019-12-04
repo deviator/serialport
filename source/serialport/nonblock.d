@@ -49,5 +49,5 @@ class SerialPortNonBlk : SerialPortBase
             PortClosedException if port closed
             WriteException if read error occurs
      +/
-    size_t write(const(void)[] buf) @nogc { return m_write(buf); }
+    size_t write(string buf) @nogc { return m_write(buf); }
 }

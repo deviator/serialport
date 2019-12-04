@@ -401,7 +401,7 @@ protected:
         return buf[0..res];
     }
 
-    size_t m_write(const(void[]) arr) @nogc
+    size_t m_write(string arr) @nogc
     {
         // non-blocking algorithm
         if (closed) throwPortClosedException(port);
@@ -827,5 +827,5 @@ public:
             WriteException if read error occurs
             TimeoutException if timeout expires
      +/
-    abstract void write(const(void[]) buf) @nogc;
+    abstract size_t write(string buf) @nogc;
 }

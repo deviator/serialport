@@ -151,7 +151,7 @@ public:
         return buf[0..res];
     }
 
-    override void write(const(void[]) arr)
+    override size_t write(string arr)
     {
         if (closed) throwPortClosedException(port);
 
@@ -162,11 +162,14 @@ public:
         while (sw.peek < timeout)
         {
             written += m_write(arr[written..$]);
-            if (written == arr.length) return;
+            if (written == arr.length) {
+                return written;
+            }
             this.sleep(pause);
         }
 
         throwTimeoutException(port, "write timeout");
+        assert(0);
     }
 
     /++ Read data while available by parts, sleep between checks.
