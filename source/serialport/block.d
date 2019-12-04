@@ -90,13 +90,13 @@ public:
             {
                 if (full.peek > ttm) {
                     throwTimeoutException(port, "write timeout");
-				}
+                }
 
                 const res = posixWrite(_handle, arr[written..$].ptr, arr.length - written);
 
                 if (res < 0) {
                     throwWriteException(port, "posix write", errno);
-				}
+                }
 
                 written += res;
             }
@@ -108,11 +108,11 @@ public:
 
             if (!WriteFile(_handle, arr.ptr, cast(uint)arr.length, &written, null)) {
                 throwWriteException(port, "win write", GetLastError());
-			}
+            }
 
             if (arr.length != written) {
                 throwTimeoutException(port, "write timeout");
-			}
+            }
  
             return written;
         }
