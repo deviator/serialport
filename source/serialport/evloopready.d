@@ -82,16 +82,13 @@ public:
         evloop.wakeOnRead(true, timeout);
         scope (exit) evloop.wakeOnRead(false);
 
-        import std.stdio;
         while (sw.peek < timeout)
         {
             res += m_read(buf[res..$]).length;
             if (res == buf.length) return buf[];
 
             evloop.wait();
-            stderr.writeln("WAKEUP IN SERIALPORT.READ !!!!!!!!!");
         }
-        stderr.writeln("TIMEOUT !!!!!!!!!");
 
         checkAbility(cr, res, buf.length);
 
