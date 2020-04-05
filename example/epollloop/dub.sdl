@@ -1,3 +1,0 @@
-name "epollloop"
-description "Example with epoll event loop"
-dependency "serialport" path="../.."

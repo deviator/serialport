@@ -1,3 +1,5 @@
+module app;
+
 import std.stdio;
 import std : format;
 import std.datetime;
@@ -7,7 +9,9 @@ import core.thread : Fiber;
 import serialport;
 
 import errproc;
-import evloop;
+
+version (epoll) import epoll_loop;
+version (select) import select_loop;
 
 class MasterDevice
 {

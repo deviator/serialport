@@ -1,69 +1,110 @@
-module evloop;
+module select_loop;
 
-import std.datetime : Duration, hnsecs;
-import std.experimental.logger;
-import std.exception : enforce;
+import core.sys.posix.sys.select;
 
-import core.thread : Fiber;
+import base;
 
-import core.sys.posix.unistd;
-import core.sys.linux.timerfd;
-import core.sys.linux.sys.signalfd;
-import core.sys.linux.epoll;
-import core.sys.linux.errno;
-
-import errproc;
-
-std.datetime.stopwatch.StopWatch sw;
-
-static this() { sw.start(); }
-
-void mlog(const(char[]) msg, string fnc=__FUNCTION__)
+enum EvType
 {
-    import std.stdio : stderr;
-    stderr.writefln("[%09d] %s: %s", sw.peek().total!"usecs", fnc, msg);
+    ERR = 1,
+    READ = 2,
+    WRITE = 4
 }
 
-void mlogf(string fnc=__FUNCTION__, Args...)(string fmt, Args args)
-{ mlog(format(fmt, args), fnc); }
+alias Callback = void delegate(uint mask);
 
-alias Callback = void delegate(uint);
+struct FDData
+{
+    bool read;
+    bool write;
+    Callback cb;
+    int repeat;
+}
 
 class EvLoop
 {
     private bool isRun;
 
-    int epfd;
-    epoll_event[256] events;
+    FDData[int] fds;
 
     this()
     {
-        epfd = check!epoll_create1(EPOLL_CLOEXEC);
         isRun = true;
     }
 
     bool step()
     {
-        int nfds = check!epoll_wait(epfd,
-            events.ptr, cast(int)events.length, -1);
+        fd_set read_set, write_set, err_set;
 
-        foreach (i; 0 .. nfds)
+        FD_ZERO(&read_set);
+        FD_ZERO(&write_set);
+        FD_ZERO(&err_set);
+
+        int nfds = 0;
+
+        foreach (fd, data; fds)
         {
-            auto e = events[i];
-            auto cb = cast(Callback*)(e.data.ptr);
-            if (cb is null)
+            //mlogf("SET %d %s", fd, data);
+            if (data.repeat == 0) continue;
+
+            if (data.read)
             {
-                error("have null ptr in event data");
+                FD_SET(fd, &read_set);
+                if (fd > nfds) nfds = fd;
+            }
+            if (data.write)
+            {
+                FD_SET(fd, &write_set);
+                if (fd > nfds) nfds = fd;
+            }
+            FD_SET(fd, &err_set);
+        }
+
+        nfds++;
+
+        //mlog("SELECT");
+        check!select(nfds, &read_set, &write_set, &err_set, null);
+        //mlog("   SELECT FIN");
+
+        foreach (fd, data; fds)
+        {
+            //mlogf("CHECK FD %d %s", fd, data);
+            const setted = FD_ISSET(fd, &read_set) ||
+                FD_ISSET(fd, &write_set) ||
+                FD_ISSET(fd, &err_set);
+            if (setted)
+            {
+                //mlogf("      setted %d", fd);
+                if (data.repeat > 0)
+                    data.repeat--;
+            }
+
+            if (FD_ISSET(fd, &err_set))
+            {
+                //mlogf("         as err %d", fd);
+                data.cb(EvType.ERR);
                 continue;
             }
-            (*cb)(e.events);
+
+            if (setted)
+            {
+                //mlogf("    CALL BACK %d", fd);
+                data.cb( (FD_ISSET(fd, &read_set)  ? EvType.READ  : 0 ) |
+                        (FD_ISSET(fd, &write_set) ? EvType.WRITE : 0) );
+                //mlogf("    CHECK FD %d FIN", fd);
+            }
         }
+
         return isRun;
     }
 
     void stop() { isRun = false; }
 
     void run() { while (step()) {} }
+
+    void addFD(int fd, FDData data) { fds[fd] = data; }
+    void setFD(int fd, FDData data) { fds[fd] = data; }
+    void delFD(int fd) { fds.remove(fd); }
 }
 
 private EvLoop evloop;
@@ -83,8 +124,7 @@ EvLoop defaultLoop() @property
 class Timer
 {
     int fd;
-    Callback cb;
-    epoll_event ev;
+    FDData data;
 
     void delegate(Timer) func;
 
@@ -95,15 +135,13 @@ class Timer
         func = fnc;
 
         fd = check!timerfd_create(CLOCK_MONOTONIC, 0);
-
-        cb = &onTriggered;
-        ev.data.ptr = cast(void*)&cb;
-        ev.events = EPOLLIN | EPOLLONESHOT;
-
+        mlogf("TIMER %d", fd);
         const it = itimerspec(timespec(0,0), timespec(0,0));
         check!timerfd_settime(fd, 0, &it, null);
 
-        check!epoll_ctl(evloop.epfd, EPOLL_CTL_ADD, fd, &ev);
+        data = FDData(true, false, &onTriggered, 1);
+
+        evloop.addFD(fd, data);
     }
 
     void set(Duration d)
@@ -112,10 +150,12 @@ class Timer
         d.split!("seconds", "nsecs")(t.tv_sec, t.tv_nsec);
         auto it = itimerspec(timespec(0,0), t);
         check!timerfd_settime(fd, 0, &it, null);
-        check!epoll_ctl(evloop.epfd, EPOLL_CTL_MOD, fd, &ev);
+
+        data.repeat = d > Duration.zero ? 1 : 0;
+        evloop.setFD(fd, data);
     }
 
-    private void onTriggered(uint evmask)
+    private void onTriggered(uint mask)
     {
         ulong v;
         check!read(fd, &v, v.sizeof);
@@ -202,36 +242,37 @@ class Worker
 class WrapFD
 {
     int fd = -1;
-    epoll_event ev;
-    Callback cb;
+    FDData data;
     Worker wrkr;
-
-    bool callFiberOnRead;
-    bool callFiberOnWrite;
 
     this(Worker w)
     {
         wrkr = w;
-        ev.events = EPOLLIN | EPOLLOUT | EPOLLET;
-        cb = &call;
-        ev.data.ptr = cast(void*)&cb;
+        data.cb = &call;
+        data.read = true;
+        data.write = true;
+        data.repeat = 1;
     }
 
     void beforeCloseHandle(int h)
     {
         assert(h == fd, "wrong fd for WrapFD.beforeCloseHandle");
-        check!epoll_ctl(evloop.epfd, EPOLL_CTL_DEL, h, null);
+        evloop.delFD(fd);
     }
 
     void afterOpenHandle(int h)
     {
         assert(fd == -1, "WrapFD is inited");
-        check!epoll_ctl(evloop.epfd, EPOLL_CTL_ADD, h, &ev);
         fd = h;
+        data.repeat = 0;
+        evloop.addFD(fd, data);
+        mlogf("WRAP %d", fd);
     }
 
     void wakeOnIO(bool wake, Duration timeout)
     {
+        data.repeat = wake ? -1 : 0;
+        evloop.setFD(fd, data);
         wrkr.currWaker = wake ? this :
                          wrkr.currWaker == this ? null :
                          wrkr.currWaker;
@@ -240,25 +281,15 @@ class WrapFD
 
     void call(uint evmask)
     {
-        // shut down connection
-        if (evmask & EPOLLRDHUP) { mlog("EPOLLRDHUP"); }
-        // close other side of pipe
-        if (evmask & EPOLLERR) { mlog("EPOLLERR"); }
-        // internal error
-        if (evmask & EPOLLHUP) { mlog("EPOLLHUP"); }
-        // priority?
-        if (evmask & EPOLLPRI) { mlog("EPOLLPRI"); }
-
-        // EPOLLET can only be setted
-        // EPOLLONESHOT can only be setted
+        if (evmask & EvType.ERR) mlog("SELECT ERR");
 
         // can read
-        if (evmask & EPOLLIN)
+        if (evmask & EvType.READ)
             if (wrkr.currWaker == this)
                 wrkr.exec();
 
         // can write
-        if (evmask & EPOLLOUT)
+        if (evmask & EvType.WRITE)
             if (wrkr.currWaker == this)
                 wrkr.exec();
     }

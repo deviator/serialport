@@ -1,0 +1,12 @@
+name "evloop"
+description "Example with event loop"
+dependency "serialport" path="../.."
+targetType "executable"
+
+configuration "epoll" {
+    versions "epoll"
+}
+
+configuration "select" {
+    versions "select"
+}

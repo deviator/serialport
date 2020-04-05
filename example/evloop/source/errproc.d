@@ -62,3 +62,20 @@ auto check(alias fn, string file=__FILE__, size_t line=__LINE__, Args...)(Args a
 
 auto checkNB(alias fn, string file=__FILE__, size_t line=__LINE__, Args...)(Args args)
 { return checkBase!(fn, file, line)([EAGAIN], args); }
+
+
+import std.format : format;
+import std.datetime.stopwatch;
+
+StopWatch sw;
+
+static this() { sw.start(); }
+
+void mlog(const(char[]) msg, string fnc=__FUNCTION__)
+{
+    import std.stdio : stderr;
+    stderr.writefln("[%09d] %s: %s", sw.peek().total!"usecs", fnc, msg);
+}
+
+void mlogf(string fnc=__FUNCTION__, Args...)(string fmt, Args args)
+{ mlog(format(fmt, args), fnc); }
