@@ -93,8 +93,8 @@ class SPELH : SerialPortEL.EvLoopHook
 override:
     void beforeCloseHandle(SPHandle h) { wfd.beforeCloseHandle(h); }
     void afterOpenHandle(SPHandle h) { wfd.afterOpenHandle(h); }
-    void wakeOnRead(bool w, Duration d) { wfd.wakeOnRead(w, d); }
-    void wakeOnWrite(bool w, Duration d) { wfd.wakeOnWrite(w, d); }
+    void wakeOnRead(bool w, Duration d) { wfd.wakeOnIO(w, d); }
+    void wakeOnWrite(bool w, Duration d) { wfd.wakeOnIO(w, d); }
     void wait() { Fiber.yield(); }
 }
 
@@ -114,12 +114,12 @@ void main(string[] args)
     auto s = new SlaveDevice(sp2);
     sw.run({ s.step(); });
 
-    size_t n;
+    size_t n = 8;
     new Timer((tm){
+        n /= 2;
+        if (n) tm.set(n.seconds);
         mlog("timer");
-        if (n++<10)
-            tm.set(1.seconds);
-    }).set(1.seconds);
+    }).set(n.seconds);
 
     mlog("run loop");
 

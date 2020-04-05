@@ -230,15 +230,7 @@ class WrapFD
         fd = h;
     }
 
-    void wakeOnRead(bool wake, Duration timeout)
-    {
-        wrkr.currWaker = wake ? this :
-                         wrkr.currWaker == this ? null :
-                         wrkr.currWaker;
-        wrkr.timer.set(timeout);
-    }
-
-    void wakeOnWrite(bool wake, Duration timeout)
+    void wakeOnIO(bool wake, Duration timeout)
     {
         wrkr.currWaker = wake ? this :
                          wrkr.currWaker == this ? null :
