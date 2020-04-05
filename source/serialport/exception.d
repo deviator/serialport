@@ -33,6 +33,10 @@ class TimeoutException : SerialPortException
 { private this() @safe pure nothrow @nogc { super(); } }
 
 ///
+class NullEvLoopException : SerialPortException
+{ private this() @safe pure nothrow @nogc { super(); } }
+
+///
 class SysCallException : SerialPortException
 {
     /// sys call name
@@ -161,6 +165,7 @@ static this()
             preallocSerialPortException,
             preallocPortClosedException,
             preallocTimeoutException,
+            preallocNullEvLoopException,
             preallocSysCallException,
             preallocReadException,
             preallocWriteException,
@@ -174,6 +179,7 @@ static this()
 mixin throwSPEMix!SerialPortException;
 mixin throwSPEMix!PortClosedException;
 mixin throwSPEMix!TimeoutException;
+mixin throwSPEMix!NullEvLoopException;
 
 mixin throwSPSCEMix!SysCallException;
 mixin throwSPSCEMix!ReadException;

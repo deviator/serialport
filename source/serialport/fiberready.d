@@ -131,7 +131,7 @@ public:
         if (isSomeFunction!F && (functionAttributes!F & FunctionAttribute.nogc))
     { sleepFunc = sf; super(port, conf); }
 
-    override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing)
+    override void[] read(void[] buf, CanRead cr=CanRead.allOrNothing) @nogc
     {
         if (closed) throwPortClosedException(port);
 
@@ -151,7 +151,7 @@ public:
         return buf[0..res];
     }
 
-    override void write(const(void[]) arr)
+    override void write(const(void[]) arr) @nogc
     {
         if (closed) throwPortClosedException(port);
 
@@ -214,7 +214,7 @@ public:
      +/
     void[] readContinues(void[] buf, Duration startTimeout=1.seconds,
                                      Duration frameGap=50.msecs,
-                                     bool expectAnything=true)
+                                     bool expectAnything=true) @nogc
     {
         if (closed) throwPortClosedException(port);
 

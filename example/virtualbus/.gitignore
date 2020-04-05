@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/virtualbus
+virtualbus.so
+virtualbus.dylib
+virtualbus.dll
+virtualbus.a
+virtualbus.lib
+virtualbus-test-*
+*.exe
+*.o
+*.obj
+*.lst

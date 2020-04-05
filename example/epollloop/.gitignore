@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/epollloop
+.so
+.dylib
+.dll
+.a
+.lib
+-test-*
+*.exe
+*.o
+*.obj
+*.lst
+*.port

@@ -1,0 +1,6 @@
+name "virtualbus"
+description "Virtual BUS"
+authors "deviator"
+
+targetType "executable"
+dependency "serialport" path="../.."

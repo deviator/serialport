@@ -49,7 +49,7 @@ package
 
         alias closeHandle = posixClose;
         /// Posix handle is int
-        alias SPHandle = int;
+        public alias SPHandle = int;
         enum initHandle = -1;
     }
     version(Windows)
@@ -120,7 +120,7 @@ package
 
         alias closeHandle = CloseHandle;
         /// Windows is HANDLE
-        alias SPHandle = HANDLE;
+        public alias SPHandle = HANDLE;
         enum initHandle = null;
     }
 }

@@ -89,7 +89,7 @@ public:
     ~this() { close(); }
 
     /// Close handle
-    void close() @nogc
+    void close()
     {
         if (closed) return;
         closeHandle(_handle);
@@ -513,6 +513,7 @@ protected:
             opt.c_oflag &= ~OPOST;
             opt.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
             opt.c_cflag &= ~(CSIZE | PARENB);
+
             opt.c_cc[VMIN] = 0;
             opt.c_cc[VTIME] = 0;
 
@@ -800,7 +801,7 @@ public:
             ReadException if read error occurs
             TimeoutException if timeout expires
      +/
-    abstract void[] read(void[] buf, CanRead cr=CanRead.allOrNothing) @nogc;
+    abstract void[] read(void[] buf, CanRead cr=CanRead.allOrNothing) /+ @nogc +/;
 
     ///
     protected void checkAbility(CanRead cr, size_t readed, size_t buffer) @nogc
@@ -827,5 +828,5 @@ public:
             WriteException if read error occurs
             TimeoutException if timeout expires
      +/
-    abstract void write(const(void[]) buf) @nogc;
+    abstract void write(const(void[]) buf) /+ @nogc +/;
 }

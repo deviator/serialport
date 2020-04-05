@@ -14,6 +14,7 @@ import serialport.base;
 import serialport.config;
 import serialport.block;
 import serialport.fiberready;
+import serialport.evloopready;
 import serialport.nonblock;
 import serialport.exception;
 import serialport.types;
