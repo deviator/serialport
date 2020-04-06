@@ -1,4 +1,4 @@
-module errproc;
+module evloop.errproc;
 
 import std.array : appender;
 import std.format : formattedWrite;

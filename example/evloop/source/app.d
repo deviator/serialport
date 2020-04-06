@@ -8,10 +8,7 @@ import core.thread : Fiber;
 
 import serialport;
 
-import errproc;
-
-version (epoll) import epoll_loop;
-version (select) import select_loop;
+import evloop;
 
 class MasterDevice
 {
@@ -39,6 +36,7 @@ class MasterDevice
         {
             port.write(buffer.data[0..min($,n)]);
             n += uniform(1,5);
+            mlog("write step sleep");
             WFiber.sleep(uniform(100,1000).msecs);
         }
         mlog("end write ]]]]");
@@ -92,13 +90,13 @@ class SlaveDevice
 
 class SPELH : SerialPortEL.EvLoopHook
 {
-    WrapFD wfd;
-    this(WrapFD wfd) { this.wfd = wfd; }
+    Waker wkr;
+    this(Waker waker) { wkr = waker; }
 override:
-    void beforeCloseHandle(SPHandle h) { wfd.beforeCloseHandle(h); }
-    void afterOpenHandle(SPHandle h) { wfd.afterOpenHandle(h); }
-    void wakeOnRead(bool w, Duration d) { wfd.wakeOnIO(w, d); }
-    void wakeOnWrite(bool w, Duration d) { wfd.wakeOnIO(w, d); }
+    void beforeCloseHandle(SPHandle h) { wkr.beforeCloseHandle(h); }
+    void afterOpenHandle(SPHandle h) { wkr.afterOpenHandle(h); }
+    void wakeOnRead(bool w, Duration d) { wkr.wakeOnRead(w, d); }
+    void wakeOnWrite(bool w, Duration d) { wkr.wakeOnWrite(w, d); }
     void wait() { Fiber.yield(); }
 }
 
@@ -106,7 +104,7 @@ void main(string[] args)
 {
     auto mw = new Worker;
     scope(exit) mw.finish();
-    auto sp1 = new SerialPortEL(new SPELH(mw.makeNewWrapFD()), args[1]);
+    auto sp1 = new SerialPortEL(new SPELH(mw.makeNewWaker()), args[1]);
     auto m = new MasterDevice(sp1);
     mw.setExecFunc({ m.step(); });
     mw.period = 7.seconds;
@@ -114,12 +112,12 @@ void main(string[] args)
 
     auto sw = new Worker;
     scope(exit) sw.finish();
-    auto sp2 = new SerialPortEL(new SPELH(sw.makeNewWrapFD()), args[2]);
+    auto sp2 = new SerialPortEL(new SPELH(sw.makeNewWaker()), args[2]);
     auto s = new SlaveDevice(sp2);
     sw.run({ s.step(); });
 
     size_t n = 8;
-    new Timer((tm){
+    defaultLoop.makeNewTimer((tm){
         n /= 2;
         if (n) tm.set(n.seconds);
         mlog("timer");
