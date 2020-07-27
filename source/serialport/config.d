@@ -27,22 +27,22 @@ struct SPConfig
     /++ Set parity value
         Returns: this
         +/
-    ref SPConfig set(Parity v) @nogc { parity = v; return this; }
+    ref SPConfig set(Parity v) @nogc return { parity = v; return this; }
 
     /++ Set baudrate value
         Returns: this
         +/
-    ref SPConfig set(uint v) @nogc { baudRate = v; return this; }
+    ref SPConfig set(uint v) @nogc return { baudRate = v; return this; }
 
     /++ Set data bits value
         Returns: this
         +/
-    ref SPConfig set(DataBits v) @nogc { dataBits = v; return this; }
+    ref SPConfig set(DataBits v) @nogc return { dataBits = v; return this; }
 
     /++ Set stop bits value
         Returns: this
         +/
-    ref SPConfig set(StopBits v) @nogc { stopBits = v; return this; }
+    ref SPConfig set(StopBits v) @nogc return { stopBits = v; return this; }
 
     /++ Use mode string for setting baudrate, data bits, parity and stop bits.
 
@@ -62,7 +62,7 @@ struct SPConfig
         Throws:
             ParseModeException if mode string is badly formatted or using bad values
         +/
-    ref SPConfig set(string mode)
+    ref SPConfig set(string mode) return
     {
         alias PME = ParseModeException;
 
