@@ -56,7 +56,7 @@ struct PairList(A,B)
     }
 }
 
-auto pairList(A,B)(Pair!(A,B)[] list...) { return PairList!(A,B)(list); }
+auto pairList(A,B)(Pair!(A,B)[] list...) { return PairList!(A,B)(list.dup); }
 
 unittest
 {
